@@ -1,12 +1,82 @@
 {
   "name": "kenty",
   "private": true,
-  "version": "0.2.0",
-  "workspaces": ["web", "server"],
+  "version": "0.3.0",
+  "workspaces": [
+    "web",
+    "server"
+  ],
+  "main": "desktop/main.cjs",
   "scripts": {
     "dev": "concurrently \"npm run dev --workspace web\" \"npm run dev --workspace server\"",
     "build": "npm run build --workspace web",
-    "start:server": "npm run start --workspace server"
+    "start:server": "npm run start --workspace server",
+    "desktop:dev": "npm run build --workspace web && electron .",
+    "desktop:dist": "npm run build --workspace web && npm run icon:generate && electron-builder --win nsis",
+    "android:sync": "npm run build --workspace web && cd web && npx cap sync android",
+    "android:open": "cd web && npx cap open android",
+    "ios:sync": "npm run build --workspace web && cd web && npx cap sync ios",
+    "ios:open": "cd web && npx cap open ios",
+    "native:android:add": "cd web && npx cap add android",
+    "native:ios:add": "cd web && npx cap add ios",
+    "icon:generate": "node scripts/generate-icon.cjs"
   },
-  "devDependencies": { "concurrently": "^9.1.2" }
+  "devDependencies": {
+    "@capacitor/cli": "^7.4.3",
+    "concurrently": "^9.1.2",
+    "electron": "^36.4.0",
+    "electron-builder": "^26.0.12",
+    "png-to-ico": "^2.1.8",
+    "sharp": "^0.34.2",
+    "@capacitor/assets": "^3.0.5"
+  },
+  "dependencies": {
+    "@capacitor/android": "^7.4.3",
+    "@capacitor/core": "^7.4.3",
+    "@capacitor/ios": "^7.4.3",
+    "@capacitor/camera": "^7.0.2",
+    "@capacitor/push-notifications": "^7.0.2",
+    "@capacitor/local-notifications": "^7.0.2",
+    "electron-updater": "^6.6.2"
+  },
+  "build": {
+    "appId": "com.kenty.desktop",
+    "productName": "KENTY",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "desktop/**/*",
+      "web/dist/**/*",
+      "node_modules/**/*",
+      "package.json"
+    ],
+    "asar": true,
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "desktop/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "KENTY"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "gecnjnf",
+        "repo": "kenty"
+      }
+    ]
+  }
 }

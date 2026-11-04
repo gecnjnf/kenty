@@ -1102,6 +1102,7 @@ export default function App() {
               <button type="button" className={'accent-option accent-sunset ' + (accentTheme === 'sunset' ? 'active' : '')} onClick={() => setAccentTheme('sunset')}><i />Закат</button>
             </div>
           </section>
+          {window.Capacitor?.isNativePlatform?.() && <section className="settings-card"><div className="settings-card-heading"><div><h2>Push-уведомления</h2><p>Разреши KENTY показывать системные уведомления. Для доставки сообщений также нужна настройка сервера уведомлений.</p></div></div><button type="button" className="primary-button" onClick={async () => { const result = await window.kentyEnablePushNotifications?.(); setNotice(result?.message || 'Не удалось включить уведомления.'); }}>Включить уведомления</button></section>}
         </div>}
 
         {tab === 'voice' && <div className="voice-content">
