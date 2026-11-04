@@ -1,6 +1,6 @@
 {
   "name": "kenty-web",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -9,6 +9,7 @@
     "preview": "vite preview --host 0.0.0.0"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.57.0",
     "livekit-client": "^2.23.0",
     "livekit-server-sdk": "^2.19.2",
     "react": "^18.3.1",
