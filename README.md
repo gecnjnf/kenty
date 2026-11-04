@@ -1,18 +1,32 @@
-# KENTY
+# KENTY — голосовая альфа-версия
 
-KENTY is an early-stage chat app starter: a React web client and a small Node.js API.
+Это ранняя тестовая сборка KENTY с голосовыми комнатами на LiveKit.
 
-## Requirements
-- Node.js 20 or newer
-- npm
+## Что уже есть
+- веб-интерфейс KENTY;
+- тестовые голосовые комнаты «Общая», «Игровая», «Тихая»;
+- подключение нескольких участников к одной комнате;
+- включение и выключение микрофона;
+- список участников и индикатор говорящего;
+- серверная функция выдачи короткоживущих токенов.
 
-## Run locally
-1. Open this folder in a terminal.
-2. Run `npm install`
-3. Run `npm run dev`
-4. Open the local web address printed by Vite (normally http://localhost:5173).
+## Перед запуском
+В Vercel для проекта нужно задать переменные окружения:
+- `LIVEKIT_URL` — WebSocket URL проекта LiveKit Cloud, обычно начинается с `wss://`;
+- `LIVEKIT_API_KEY` — API Key из LiveKit;
+- `LIVEKIT_API_SECRET` — API Secret из LiveKit;
+- `KENTY_VOICE_ACCESS_CODE` — длинный общий код доступа, которым делятся только с приглашёнными друзьями.
 
-The API runs on http://localhost:3001.
+Все четыре переменные добавляются в Production (и Preview, если нужно). Не добавляйте API Secret в файлы проекта, GitHub или клиентский код.
 
-## Current scope
-This starter includes a basic chat-style interface and a health-check API. It is **not yet** a production chat service: accounts, persistent messages, friends, voice rooms, screen sharing, database storage, and deployment still need to be implemented and configured.
+После добавления переменных нужно создать новое развертывание в Vercel.
+
+## Локальный запуск
+Нужен Node.js 20+.
+1. В терминале откройте папку `web`.
+2. Выполните `npm install`.
+3. Создайте `.env.local` с теми же четырьмя переменными.
+4. Запустите `npm run dev` для интерфейса. Для работы серверной функции нужен Vercel CLI (`vercel dev`) из папки `web`.
+
+## Ограничения этой альфа-версии
+Регистрация, полноценные профили, постоянные сообщения, список друзей, модерация и восстановление доступа ещё не реализованы. Общий код доступа — временная защита для теста, а не полноценная система аккаунтов. Не используйте эту сборку для приватных или чувствительных разговоров.
