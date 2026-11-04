@@ -16,6 +16,8 @@ export default function App() {
   const [username, setUsername] = useState('');
   const [authBusy, setAuthBusy] = useState(false);
   const [notice, setNotice] = useState('');
+  const [installPrompt, setInstallPrompt] = useState(null);
+  const [isInstalled, setIsInstalled] = useState(() => window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone === true);
   const [error, setError] = useState('');
   const [tab, setTab] = useState('friends');
   const [search, setSearch] = useState('');
@@ -44,6 +46,28 @@ export default function App() {
   const audioElementsRef = useRef(new Map());
   const audioRef = useRef(null);
   const participantNamesRef = useRef(new Map());
+
+  useEffect(() => {
+    const onInstallAvailable = (event) => { event.preventDefault(); setInstallPrompt(event); };
+    const onInstalled = () => { setIsInstalled(true); setInstallPrompt(null); setNotice('KENTY установлено на устройство!'); };
+    window.addEventListener('beforeinstallprompt', onInstallAvailable);
+    window.addEventListener('appinstalled', onInstalled);
+    return () => {
+      window.removeEventListener('beforeinstallprompt', onInstallAvailable);
+      window.removeEventListener('appinstalled', onInstalled);
+    };
+  }, []);
+
+  async function installApp() {
+    if (installPrompt) {
+      installPrompt.prompt();
+      const choice = await installPrompt.userChoice;
+      if (choice?.outcome === 'accepted') setNotice('Установка KENTY запущена!');
+      setInstallPrompt(null);
+      return;
+    }
+    setNotice('Чтобы установить KENTY: на Android открой меню браузера и выбери «Установить приложение» или «Добавить на главный экран». На iPhone нажми «Поделиться» → «На экран Домой».');
+  }
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session));
@@ -394,6 +418,7 @@ export default function App() {
     <main className="auth-screen">
       <form className="auth-card" onSubmit={submitAuth}>
         <div className="brand-name auth-logo">KENTY</div>
+        {!isInstalled && <button type="button" className="install-button auth-install" onClick={installApp}>Установить приложение ↗</button>}
         <div className="eyebrow">YOUR SPACE. YOUR PEOPLE.</div>
         <h1>{authMode === 'login' ? 'С возвращением' : 'Создай аккаунт'}</h1>
         <p className="auth-subtitle">Общайся с друзьями, переписывайся и заходи в голосовые комнаты. Для KENTY нужна только пара ник + пароль.</p>
@@ -441,7 +466,7 @@ export default function App() {
       <section className="main-panel">
         <header className="topbar">
           <div className="topbar-title"><span className="hash">{tab === 'chat' ? '#' : '◖'}</span><b>{tab === 'friends' ? 'друзья' : tab === 'chat' ? (selectedConversation?.person?.display_name || selectedConversation?.person?.username || 'сообщения') : 'голосовые-комнаты'}</b></div>
-          <div className="topbar-right"><span className={'connection-pill ' + (connected ? 'connected' : '')}><i />{connected ? 'В голосовой комнате' : 'KENTY · пространство для своих'}</span></div>
+          <div className="topbar-right">{!isInstalled && <button type="button" className="install-button" onClick={installApp}>Установить</button>}<span className={'connection-pill ' + (connected ? 'connected' : '')}><i />{connected ? 'В голосовой комнате' : 'KENTY · пространство для своих'}</span></div>
         </header>
 
         {error && <div className="global-error">{error}<button onClick={() => setError('')}>×</button></div>}
