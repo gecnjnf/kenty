@@ -275,6 +275,12 @@ export default function App() {
     setJoining(true);
     setVoiceStatus('Запрашиваем доступ к микрофону…');
     try {
+      const { data: authData, error: authError } = await supabase.auth.getSession();
+      if (authError) throw new Error('Не удалось проверить вход в аккаунт: ' + authError.message);
+      const accessToken = authData.session?.access_token;
+      if (!accessToken) throw new Error('Сессия закончилась. Выйди из KENTY и войди снова.');
+      await supabase.realtime.setAuth(accessToken);
+
       const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }, video: false });
       localStreamRef.current = stream;
       const topic = `voice:${activeVoiceOwner?.id || session.user.id}:${selectedRoom.id}`;
@@ -304,20 +310,30 @@ export default function App() {
         updateVoiceParticipants();
       });
       const status = await new Promise((resolve, reject) => {
-        const timeout = window.setTimeout(() => reject(new Error('Сервер голосовой связи не ответил. Попробуй ещё раз.')), 12000);
-        channel.subscribe(result => {
+        const timeout = window.setTimeout(() => reject(new Error('Тайм-аут: Supabase не подтвердил вход в голосовую комнату за 15 секунд. Проверь интернет и попробуй ещё раз.')), 15000);
+        channel.subscribe((result, subscribeError) => {
           if (result === 'SUBSCRIBED') { window.clearTimeout(timeout); resolve(result); }
           if (result === 'CHANNEL_ERROR' || result === 'TIMED_OUT' || result === 'CLOSED') {
             window.clearTimeout(timeout);
-            reject(new Error('Не удалось открыть голосовую комнату. Проверь доступ к комнате и подключение к интернету.'));
+            const detail = subscribeError?.message || subscribeError?.cause?.message || '';
+            console.error('KENTY Realtime subscribe failed:', result, subscribeError);
+            reject(new Error(detail
+              ? 'Сервер отклонил вход: ' + detail
+              : result === 'TIMED_OUT'
+                ? 'Сервер не ответил вовремя. Попробуй ещё раз.'
+                : 'Сервер не разрешил открыть комнату (' + result + '). Проверь, что аккаунт активен и ты владелец комнаты или её друг.'));
           }
         });
       });
       if (status !== 'SUBSCRIBED') throw new Error('Не удалось подключиться к голосовой комнате.');
-      await channel.track({ userId: session.user.id, name: voiceName.trim(), joinedAt: new Date().toISOString() });
+      const presenceResult = await channel.track({ userId: session.user.id, name: voiceName.trim(), joinedAt: new Date().toISOString() });
+      if (presenceResult !== 'ok') {
+        console.error('KENTY presence track failed:', presenceResult);
+        throw new Error('Сервер подключил канал, но не зарегистрировал тебя в комнате. Статус: ' + String(presenceResult));
+      }
       setConnected(true);
       setMicEnabled(true);
-      setVoiceStatus('Ты в комнате «' + selectedRoom.label + '» · ' + (activeVoiceOwner?.label || 'Моя комната'));
+      setVoiceStatus('Подключено к «' + selectedRoom.label + '» · ' + (activeVoiceOwner?.label || 'Моя комната'));
       updateVoiceParticipants();
     } catch (e2) {
       const channel = voiceChannelRef.current;
@@ -331,6 +347,7 @@ export default function App() {
       localStreamRef.current = null;
       if (audioRef.current) audioRef.current.innerHTML = '';
       setConnected(false);
+      console.error('KENTY voice join failed:', e2);
       setVoiceError(e2.message || 'Не удалось подключиться к голосовой комнате.');
       setVoiceStatus('Не удалось подключиться');
     } finally {
