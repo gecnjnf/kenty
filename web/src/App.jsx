@@ -59,14 +59,36 @@ export default function App() {
   }, []);
 
   async function installApp() {
+    // Native browser install prompt: this must run directly from the user's click.
     if (installPrompt) {
-      installPrompt.prompt();
-      const choice = await installPrompt.userChoice;
-      if (choice?.outcome === 'accepted') setNotice('Установка KENTY запущена!');
-      setInstallPrompt(null);
+      try {
+        await installPrompt.prompt();
+        const choice = await installPrompt.userChoice;
+        if (choice?.outcome === 'accepted') {
+          setNotice('Подтверди установку KENTY в окне браузера.');
+        } else {
+          setNotice('Установка отменена. Нажми «Установить KENTY», когда будешь готов.');
+        }
+      } catch {
+        setNotice('Браузер не открыл окно установки. Используй инструкцию ниже для своего устройства.');
+      } finally {
+        setInstallPrompt(null);
+      }
       return;
     }
-    setNotice('Чтобы установить KENTY: на компьютере открой меню браузера (⋮) и выбери «Установить KENTY» или «Установить страницу как приложение». На Android выбери «Установить приложение» / «Добавить на главный экран». На iPhone нажми «Поделиться» → «На экран Домой».');
+
+    const ua = navigator.userAgent || '';
+    const isIOS = /iPhone|iPad|iPod/i.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    const isAndroid = /Android/i.test(ua);
+    const isDesktop = !isIOS && !isAndroid;
+
+    if (isIOS) {
+      setNotice('На iPhone/iPad: нажми «Поделиться» в Safari → «На экран Домой» → «Добавить». iOS не позволяет сайтам открывать установку автоматически.');
+    } else if (isAndroid) {
+      setNotice('Если окно установки не появилось, открой KENTY в Chrome и выбери ⋮ → «Установить приложение» или «Добавить на главный экран».');
+    } else if (isDesktop) {
+      setNotice('Если окно установки не появилось, открой меню Chrome, Edge или Яндекс Браузера и выбери «Установить KENTY» / «Установить страницу как приложение».');
+    }
   }
 
   useEffect(() => {
