@@ -20,6 +20,8 @@ export default function App() {
   const [isInstalled, setIsInstalled] = useState(() => window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone === true);
   const [error, setError] = useState('');
   const [tab, setTab] = useState('friends');
+  const [theme, setTheme] = useState(() => localStorage.getItem('kenty-theme') || 'dark');
+  const [avatarBusy, setAvatarBusy] = useState(false);
   const [search, setSearch] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [friendships, setFriendships] = useState([]);
@@ -94,6 +96,11 @@ export default function App() {
   }
 
   useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    localStorage.setItem('kenty-theme', theme);
+  }, [theme]);
+
+  useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session));
     const { data: listener } = supabase.auth.onAuthStateChange((_event, next) => setSession(next));
     return () => listener.subscription.unsubscribe();
@@ -162,6 +169,29 @@ export default function App() {
     else { setProfile(data); setVoiceName(data.display_name || data.username); }
   }
 
+  async function uploadAvatar(event) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file || !session?.user?.id) return;
+    if (!['image/jpeg','image/png','image/webp','image/gif'].includes(file.type)) { setError('Выбери JPG, PNG, WEBP или GIF.'); return; }
+    if (file.size > 5 * 1024 * 1024) { setError('Изображение должно быть не больше 5 МБ.'); return; }
+    setAvatarBusy(true); setError('');
+    try {
+      const ext = file.type === 'image/jpeg' ? 'jpg' : file.type.split('/')[1];
+      const path = `${session.user.id}/avatar-${Date.now()}.${ext}`;
+      const { error: uploadError } = await supabase.storage.from('avatars').upload(path, file, { contentType: file.type, upsert: true, cacheControl: '3600' });
+      if (uploadError) throw uploadError;
+      const { data } = supabase.storage.from('avatars').getPublicUrl(path);
+      const avatarUrl = `${data.publicUrl}?v=${Date.now()}`;
+      const { error: updateError } = await supabase.from('profiles').update({ avatar_url: avatarUrl }).eq('id', session.user.id);
+      if (updateError) throw updateError;
+      setProfile(prev => ({ ...prev, avatar_url: avatarUrl }));
+      setNotice('Аватар успешно обновлён!');
+      loadSocial();
+    } catch (uploadError) { setError(uploadError.message || 'Не удалось загрузить аватар.'); }
+    finally { setAvatarBusy(false); }
+  }
+
   async function loadSocial() {
     const { data: fs, error: fe } = await supabase.from('friendships')
       .select('id,requester_id,addressee_id,status,created_at')
@@ -182,7 +212,7 @@ export default function App() {
     const allUserIds = [...new Set((memberships || []).filter(m => myIds.has(m.conversation_id) && m.user_id !== session.user.id).map(m => m.user_id))];
     let memberProfiles = [];
     if (allUserIds.length) {
-      const { data } = await supabase.from('profiles').select('id,username,display_name').in('id', allUserIds);
+      const { data } = await supabase.from('profiles').select('id,username,display_name,avatar_url').in('id', allUserIds);
       memberProfiles = data || [];
     }
     setConversations(mine.map(c => {
@@ -551,6 +581,7 @@ export default function App() {
         <button className={'nav-item ' + (tab === 'friends' ? 'selected' : '')} onClick={() => setTab('friends')}>♧ Друзья</button>
         <button className={'nav-item ' + (tab === 'chat' ? 'selected' : '')} onClick={() => setTab('chat')}># Сообщения</button>
         <button className={'nav-item ' + (tab === 'voice' ? 'selected' : '')} onClick={() => setTab('voice')}>◖ Голосовые комнаты</button>
+        <button className={'nav-item ' + (tab === 'settings' ? 'selected' : '')} onClick={() => setTab('settings')}>⚙ Настройки</button>
         <div className="sidebar-label">ПЕРЕПИСКИ</div>
         <div className="conversation-list">
           {conversations.map(c => <button className={'conversation-link ' + (selectedConversation?.id === c.id ? 'selected' : '')} key={c.id} onClick={() => { setSelectedConversation(c); setTab('chat'); loadMessages(c.id); }}>
@@ -559,14 +590,14 @@ export default function App() {
           {!conversations.length && <small className="sidebar-empty">Пока нет переписок</small>}
         </div>
         <div className="profile-card">
-          <div className="profile-avatar">{(profile?.display_name || profile?.username || 'K')[0].toUpperCase()}</div>
+          <div className="profile-avatar">{profile?.avatar_url ? <img src={profile.avatar_url} alt="" /> : (profile?.display_name || profile?.username || 'K')[0].toUpperCase()}</div>
           <div className="profile-meta"><b>{profile?.display_name || profile?.username || 'KENTY'}</b><small>@{profile?.username || 'user'}</small></div>
           <button className="logout-button" title="Выйти" onClick={logout}>↪</button>
         </div>
       </aside>
       <section className="main-panel">
         <header className="topbar">
-          <div className="topbar-title"><span className="hash">{tab === 'chat' ? '#' : '◖'}</span><b>{tab === 'friends' ? 'друзья' : tab === 'chat' ? (selectedConversation?.person?.display_name || selectedConversation?.person?.username || 'сообщения') : 'голосовые-комнаты'}</b></div>
+          <div className="topbar-title"><span className="hash">{tab === 'chat' ? '#' : '◖'}</span><b>{tab === 'friends' ? 'друзья' : tab === 'chat' ? (selectedConversation?.person?.display_name || selectedConversation?.person?.username || 'сообщения') : tab === 'settings' ? 'настройки' : 'голосовые-комнаты'}</b></div>
           <div className="topbar-right">{!isInstalled && <button type="button" className="install-button" onClick={installApp}>Установить</button>}<span className={'connection-pill ' + (connected ? 'connected' : '')}><i />{connected ? 'В голосовой комнате' : 'KENTY · пространство для своих'}</span></div>
         </header>
 
@@ -601,6 +632,16 @@ export default function App() {
             <div className="chat-messages">{messages.map(m => <article className="chat-message" key={m.id}><div className="message-avatar">{m.sender_id === session.user.id ? (profile?.username || 'Я')[0].toUpperCase() : (selectedConversation.person?.username || 'Д')[0].toUpperCase()}</div><div><b>{m.sender_id === session.user.id ? 'Ты' : selectedConversation.person?.display_name || selectedConversation.person?.username}</b><p>{m.content}</p></div></article>)}</div>
             <form className="chat-composer" onSubmit={sendMessage}><input value={message} onChange={e => setMessage(e.target.value)} placeholder="Написать сообщение…" /><button type="submit">Отправить</button></form>
           </>}
+        </div>}
+
+        {tab === 'settings' && <div className="settings-content">
+          <section className="settings-hero"><span className="eyebrow">ТВОЙ АККАУНТ</span><h1>Настройки</h1><p>Настрой KENTY под себя — от аватара до оформления.</p></section>
+          <section className="settings-card"><div className="settings-card-heading"><div><h2>Фото профиля</h2><p>Это фото увидят твои друзья и собеседники.</p></div></div>
+            <div className="avatar-editor"><div className="avatar-preview">{profile?.avatar_url ? <img src={profile.avatar_url} alt="Твой аватар" /> : <span>{(profile?.display_name || profile?.username || 'K')[0].toUpperCase()}</span>}</div><div className="avatar-editor-copy"><b>{profile?.display_name || profile?.username || 'Твой профиль'}</b><small>@{profile?.username || 'user'}</small><label className="primary-button avatar-upload-button">{avatarBusy ? 'Загружаем…' : 'Выбрать фото'}<input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={uploadAvatar} disabled={avatarBusy} /></label><small>JPG, PNG, WEBP или GIF · до 5 МБ</small></div></div>
+          </section>
+          <section className="settings-card"><div className="settings-card-heading"><div><h2>Внешний вид</h2><p>Выбери оформление приложения. Настройка сохранится на этом устройстве.</p></div></div>
+            <div className="theme-options"><button type="button" className={'theme-option ' + (theme === 'dark' ? 'active' : '')} onClick={() => setTheme('dark')}><span className="theme-preview dark-preview"><i /><i /><i /></span><b>Тёмная</b><small>Комфортно вечером</small></button><button type="button" className={'theme-option ' + (theme === 'light' ? 'active' : '')} onClick={() => setTheme('light')}><span className="theme-preview light-preview"><i /><i /><i /></span><b>Светлая</b><small>Больше света и контраста</small></button></div>
+          </section>
         </div>}
 
         {tab === 'voice' && <div className="voice-content">
