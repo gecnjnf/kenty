@@ -567,3 +567,135 @@ body {
   .person-row { gap:8px;padding:10px 5px; }
   .friend-avatar { width:37px;height:37px;border-radius:12px; }
 }
+
+
+/* KENTY — refined product UI pass */
+:root {
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  --ui-bg: #0d0f14;
+  --ui-panel: #151821;
+  --ui-panel-2: #1a1e29;
+  --ui-line: rgba(220,225,255,.085);
+  --ui-muted: #9299aa;
+  --ui-text: #f1f2f8;
+  --ui-accent: #8b7cff;
+  --ui-accent-soft: rgba(139,124,255,.14);
+}
+body { color:var(--ui-text); background:var(--ui-bg); }
+button,input,select,textarea { font:inherit; }
+button { -webkit-tap-highlight-color:transparent; }
+.app-shell { background:linear-gradient(135deg,#0d0f14,#11141c 58%,#10151b); }
+.server-rail { width:66px; padding-top:19px; background:#0b0d12; border-right:1px solid var(--ui-line); }
+.brand-mark,.server-icon { width:42px;height:42px;border-radius:15px; }
+.server-icon { margin-top:12px; background:#202431; color:#c7c2ff; }
+.sidebar { width:252px; padding:23px 15px 14px; background:#12151d; border-right:1px solid var(--ui-line); }
+.brand-row { align-items:center; padding:0 7px 25px; }
+.brand-name { font-size:19px;letter-spacing:3px;font-weight:850; }
+.beta-tag { padding:4px 7px;border-radius:6px;background:#242239;color:#bcb4ff;font-size:8px;letter-spacing:1px; }
+.sidebar-label { margin:17px 8px 9px;color:#70788b;font-size:9px;letter-spacing:1.4px;font-weight:800; }
+.nav-item { width:100%;min-height:43px;padding:0 12px;display:flex;align-items:center;gap:11px;color:#aeb4c4;font-size:12px;font-weight:600;text-align:left; }
+.nav-item.selected { color:#f4f2ff;background:var(--ui-accent-soft);border:1px solid rgba(139,124,255,.2);box-shadow:inset 2px 0 var(--ui-accent); }
+.nav-item:hover:not(.selected) { background:rgba(255,255,255,.035);color:#fff; }
+.conversation-list { gap:4px; }
+.conversation-link { min-height:40px;padding:6px 9px;border-radius:9px;color:#aeb4c4;font-size:11px; }
+.mini-avatar { width:27px;height:27px;border-radius:9px; }
+.profile-card { margin-top:auto;padding:11px;background:#1a1e29;border:1px solid var(--ui-line);border-radius:12px; }
+.profile-avatar { width:35px;height:35px;border-radius:11px; }
+.profile-meta b { font-size:11px; }.profile-meta small { color:#858da0;font-size:9px; }
+.main-panel { min-width:0; }
+.topbar { height:64px;padding:0 26px;background:rgba(15,18,25,.88);border-bottom:1px solid var(--ui-line); }
+.topbar-title { gap:10px;font-size:13px;letter-spacing:.1px; }
+.topbar-title .hash { width:27px;height:27px;display:grid;place-items:center;border-radius:9px;background:#24243a;color:#b9b0ff; }
+.connection-pill { padding:7px 10px;border-radius:30px;color:#9ba2b4;font-size:10px; }
+.connection-pill i { background:#687084; }
+.connection-pill.connected i { background:#54d99a;box-shadow:0 0 10px #54d99a; }
+.social-content,.voice-content { width:min(100%,1040px);padding:28px 30px 42px; }
+.friends-hero { min-height:205px;padding:30px 34px;border-radius:17px;background:linear-gradient(112deg,#22243a 0%,#1b2432 65%,#1a3034 100%);border-color:rgba(166,155,255,.16);box-shadow:0 15px 38px rgba(0,0,0,.2); }
+.friends-hero:after { opacity:.09;background-size:28px 28px; }
+.friends-hero-copy .eyebrow,.social-section-heading .eyebrow { color:#a9a1f8;font-size:9px;letter-spacing:1.8px;font-weight:800; }
+.friends-hero-copy h1 { font-size:clamp(27px,3vw,34px);letter-spacing:-1.3px; }
+.friends-hero-copy p { color:#aeb6c7;font-size:12px; }
+.friends-hero-tags span { background:rgba(11,14,21,.25);border-color:rgba(203,198,255,.15);font-size:9px; }
+.friends-hero-art { opacity:.8; }
+.hero-monogram { border-radius:25px;background:linear-gradient(145deg,#9489ff,#6254c9);box-shadow:0 14px 42px rgba(103,89,220,.28),inset 0 1px rgba(255,255,255,.35); }
+.friends-stats { gap:10px;margin:14px 0 30px; }
+.friend-stat { min-height:72px;padding:13px 16px;background:#171b25;border-color:var(--ui-line);box-shadow:none;border-radius:12px; }
+.friend-stat-icon { width:34px;height:34px;border-radius:10px;background:#25243a;color:#b9b0ff; }
+.friend-stat b { font-size:20px; }.friend-stat small { color:#858da0;font-size:10px; }
+.social-section-heading { margin-bottom:12px; }
+.social-section-heading h2 { font-size:20px;letter-spacing:-.5px; }
+.section-heading-mark { background:#1b1f2a;border-color:var(--ui-line); }
+.search-panel { min-height:58px;padding:8px 9px 8px 15px;background:#171b25;border:1px solid var(--ui-line);border-radius:12px;box-shadow:none; }
+.search-panel input { color:#f3f4fb!important;font-size:12px; }
+.search-panel input::placeholder { color:#737c90; }
+.search-panel .primary-button,.primary-button,.download-main-button { border-radius:9px;background:linear-gradient(135deg,#887aff,#6d5fe0);box-shadow:0 5px 16px rgba(105,91,218,.18);font-size:11px;font-weight:750; }
+.social-section { padding:18px 19px;margin-top:14px;background:#151922;border:1px solid var(--ui-line);border-radius:13px;box-shadow:none; }
+.social-section h2 { font-size:13px; }
+.social-section h2 span { background:#26243d;color:#bdb5ff; }
+.person-row { min-height:62px; }
+.participant-avatar,.friend-avatar { width:39px;height:39px;border-radius:12px;background:linear-gradient(145deg,#343c53,#282d3c);color:#d5d9e8;box-shadow:none; }
+.friend-avatar i { border-color:#151922; }
+.small-action { min-height:34px;padding:0 13px;border-radius:8px;font-size:10px;box-shadow:none; }
+.subtle-action { min-height:34px;padding:0 12px;border-radius:8px;background:#202430;color:#b9c0d0;font-size:10px; }
+.empty-state { padding:22px 10px;color:#858da0;line-height:1.7; }
+.voice-content { padding-top:32px; }
+.voice-heading { margin-bottom:23px; }
+.voice-heading h1 { font-size:29px;letter-spacing:-.8px; }
+.voice-heading p { color:#929bad;font-size:12px; }
+.voice-orb { border:1px solid rgba(160,148,255,.2);background:radial-gradient(circle at 35% 30%,#39365f,#202332 72%);box-shadow:0 12px 36px rgba(0,0,0,.2); }
+.room-owner-picker,.join-panel,.live-panel,.room-card { background:#171b25;border:1px solid var(--ui-line);border-radius:13px;box-shadow:none; }
+.room-picker { gap:11px; }
+.room-card { min-height:116px;padding:17px; }
+.room-card.active { background:linear-gradient(145deg,#25243d,#1a202c);border-color:rgba(148,133,255,.45); }
+.room-card-title { color:#f0f1f8;font-weight:750; }
+.room-card-description { color:#8992a5; }
+.join-panel,.live-panel { padding:21px; }
+.panel-heading h2 { font-size:17px; }
+.join-hint,.alpha-note,.status-line { color:#8992a5;font-size:10px;line-height:1.6; }
+.chat-content { padding:27px 30px; }
+.chat-welcome { padding:14px 0 22px; }
+.chat-welcome h1 { font-size:21px;letter-spacing:-.4px; }
+.chat-welcome p { color:#8992a5;font-size:11px; }
+.chat-messages { padding:22px 3px; }
+.chat-message { padding:10px 11px;border-radius:11px; }
+.chat-message:hover { background:rgba(255,255,255,.025); }
+.message-avatar { width:35px;height:35px;border-radius:11px; }
+.chat-message b { color:#e9eaf2;font-size:11px; }
+.chat-message p { color:#c1c6d3;font-size:12px;line-height:1.65; }
+.chat-composer { padding:8px;border-radius:12px;background:#191d28;border:1px solid rgba(151,137,255,.16); }
+.chat-composer input { min-height:43px;color:#f4f4fa; }
+.chat-composer input::placeholder { color:#747d90; }
+.chat-composer button { min-height:40px;padding:0 16px;border-radius:9px; }
+.auth-screen { padding:25px; }
+.auth-card { border-radius:18px; }
+input,select,textarea { border-radius:9px; }
+button:focus-visible,input:focus-visible,select:focus-visible { outline:2px solid #a69aff;outline-offset:2px; }
+@media(max-width:760px) {
+ .social-content,.voice-content { padding:18px 15px 30px; }
+ .topbar { height:58px;padding:0 14px; }
+ .sidebar { width:210px;padding:18px 11px 12px; }
+ .chat-content { padding:17px 14px; }
+}
+@media(max-width:540px) {
+ .server-rail { display:none; }
+ .sidebar { width:100%; }
+ .social-content,.voice-content { padding:14px 12px calc(24px + env(safe-area-inset-bottom)); }
+ .friends-hero { min-height:180px;padding:19px 17px; }
+ .friends-hero-copy h1 { font-size:24px; }
+ .friends-stats { gap:7px; }
+ .friend-stat { padding:9px 7px; }
+ .friend-stat-icon { display:none; }
+ .social-section { padding:13px 12px; }
+ .topbar { padding:0 12px; }
+ .connection-pill { max-width:145px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+ .voice-heading h1 { font-size:24px; }
+ .room-card { min-height:104px;padding:12px; }
+ .join-panel,.live-panel { padding:15px; }
+ .chat-content { padding:12px; }
+}
+@media(prefers-reduced-motion:reduce) {
+ *,*::before,*::after { scroll-behavior:auto!important;animation-duration:.01ms!important;transition-duration:.01ms!important; }
+}
