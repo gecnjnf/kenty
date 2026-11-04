@@ -12,10 +12,12 @@ export default async function handler(req, res) {
 
   try {
     const body = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {});
-    const roomName = typeof body.roomName === 'string' ? body.roomName : '';
+    const requestedRoom = typeof body.roomName === 'string' ? body.roomName : '';
+    const [roomOwnerId, roomKey] = requestedRoom.split(':');
     const displayName = typeof body.displayName === 'string' ? body.displayName : '';
+    const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-    if (!ALLOWED_ROOMS.has(roomName)) {
+    if (!uuidPattern.test(roomOwnerId || '') || !ALLOWED_ROOMS.has(roomKey || '')) {
       return res.status(400).json({ error: 'Выбери одну из доступных голосовых комнат.' });
     }
 
@@ -42,6 +44,25 @@ export default async function handler(req, res) {
     if (!authResponse.ok) {
       return res.status(401).json({ error: 'Сессия истекла. Войди в KENTY заново.' });
     }
+    const currentUser = await authResponse.json();
+    if (roomOwnerId !== currentUser.id) {
+      const friendshipUrl = new URL(`${supabaseUrl}/rest/v1/friendships`);
+      friendshipUrl.searchParams.set('select', 'id');
+      friendshipUrl.searchParams.set('status', 'eq.accepted');
+      friendshipUrl.searchParams.set('or', `(and(requester_id.eq.${currentUser.id},addressee_id.eq.${roomOwnerId}),and(requester_id.eq.${roomOwnerId},addressee_id.eq.${currentUser.id}))`);
+      friendshipUrl.searchParams.set('limit', '1');
+      const friendshipResponse = await fetch(friendshipUrl, {
+        headers: { apikey: supabaseAnonKey, Authorization: `Bearer ${bearer}` }
+      });
+      if (!friendshipResponse.ok) {
+        return res.status(503).json({ error: 'Не удалось проверить список друзей. Попробуй ещё раз.' });
+      }
+      const acceptedFriendship = await friendshipResponse.json();
+      if (!Array.isArray(acceptedFriendship) || acceptedFriendship.length === 0) {
+        return res.status(403).json({ error: 'Эта голосовая комната доступна только друзьям её владельца.' });
+      }
+    }
+    const roomName = requestedRoom;
 
     const apiKey = process.env.LIVEKIT_API_KEY;
     const apiSecret = process.env.LIVEKIT_API_SECRET;
