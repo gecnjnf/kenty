@@ -1021,3 +1021,117 @@ body{
   .social-section{box-shadow:0 8px 22px rgba(8,12,32,.16)}
   .room-card{min-height:76px}
 }
+
+
+/* KENTY FRIEND CHAT — colorful aurora wallpaper + message bubbles */
+.chat-content{
+  position:relative;
+  isolation:isolate;
+  overflow:hidden;
+  background:
+    radial-gradient(ellipse at 12% 12%,rgba(148,82,255,.24),transparent 36%),
+    radial-gradient(ellipse at 88% 18%,rgba(44,213,224,.18),transparent 34%),
+    radial-gradient(ellipse at 72% 92%,rgba(255,91,184,.16),transparent 38%),
+    linear-gradient(135deg,#171a31 0%,#20213b 48%,#142e3b 100%);
+}
+.chat-content:before{
+  content:"";
+  position:absolute;inset:0;z-index:-1;pointer-events:none;opacity:.36;
+  background-image:
+    radial-gradient(circle at 20% 30%,rgba(186,154,255,.5) 1px,transparent 1.7px),
+    radial-gradient(circle at 75% 65%,rgba(91,236,241,.42) 1px,transparent 1.8px),
+    linear-gradient(125deg,transparent 0 42%,rgba(255,255,255,.035) 50%,transparent 58%);
+  background-size:34px 34px,47px 47px,100% 100%;
+  mask-image:linear-gradient(to bottom,transparent,#000 15%,#000 90%,transparent);
+}
+.chat-content:after{
+  content:"";position:absolute;z-index:-1;pointer-events:none;
+  width:340px;height:260px;right:-150px;top:22%;
+  border-radius:50%;
+  background:radial-gradient(ellipse,rgba(91,121,255,.19),rgba(167,88,255,.08) 48%,transparent 72%);
+  filter:blur(12px);
+}
+.chat-welcome{
+  position:relative;z-index:1;flex:none;
+  padding:12px 16px 20px;margin:-4px -4px 0;
+  border:1px solid rgba(178,157,255,.2);border-radius:17px;
+  background:linear-gradient(110deg,rgba(112,77,205,.23),rgba(47,158,177,.15),rgba(207,80,162,.12));
+  box-shadow:0 12px 32px rgba(4,8,28,.15),inset 0 1px rgba(255,255,255,.07);
+  backdrop-filter:blur(12px);
+}
+.chat-welcome-icon{
+  background:linear-gradient(140deg,#a35cff,#6675ff 55%,#35d5dc);
+  color:#fff;box-shadow:0 6px 22px rgba(137,91,255,.36),inset 0 1px rgba(255,255,255,.35);
+}
+.chat-welcome h1{color:#fff}
+.chat-welcome p{color:#c2c5e7}
+.chat-messages{
+  position:relative;z-index:1;min-height:0;
+  padding:22px 8px;scrollbar-width:thin;
+  scrollbar-color:rgba(165,139,255,.45) transparent;
+}
+.chat-message{
+  align-items:flex-end;gap:9px;margin-bottom:17px;
+  animation:chat-message-in .22s ease-out both;
+}
+.chat-message>div:last-child{
+  max-width:min(78%,620px);padding:10px 14px 11px;
+  border:1px solid rgba(179,164,255,.19);
+  border-radius:5px 16px 16px 16px;
+  background:linear-gradient(135deg,rgba(75,66,125,.88),rgba(43,73,103,.91));
+  box-shadow:0 7px 20px rgba(3,8,25,.18),inset 0 1px rgba(255,255,255,.06);
+  backdrop-filter:blur(9px);
+}
+.chat-message b{color:#e6dcff;font-size:11px}
+.chat-message p{color:#f0f2ff;line-height:1.55;margin:5px 0 0}
+.chat-message.message-own{flex-direction:row-reverse}
+.chat-message.message-own>div:last-child{
+  border-color:rgba(103,224,238,.3);
+  border-radius:16px 5px 16px 16px;
+  background:linear-gradient(135deg,rgba(105,70,192,.94),rgba(43,132,164,.94) 100%);
+  box-shadow:0 8px 22px rgba(50,95,201,.2),inset 0 1px rgba(255,255,255,.12);
+}
+.chat-message.message-own b{color:#e5ffff}
+.chat-message.message-own p{color:#fff}
+.message-avatar{
+  overflow:hidden;border:2px solid rgba(205,193,255,.5);
+  box-shadow:0 4px 15px rgba(101,91,220,.28);
+}
+.message-avatar img,.mini-avatar img,.profile-avatar img,.participant-avatar img{
+  width:100%;height:100%;object-fit:cover;border-radius:inherit;
+}
+.chat-composer{
+  position:relative;z-index:2;flex:none;
+  background:linear-gradient(110deg,rgba(57,48,91,.96),rgba(31,72,88,.96));
+  border:1px solid rgba(171,150,255,.35);
+  box-shadow:0 10px 30px rgba(4,8,28,.25),inset 0 1px rgba(255,255,255,.07);
+  backdrop-filter:blur(16px);
+}
+.chat-composer input{color:#fff}
+.chat-composer button{
+  background:linear-gradient(110deg,#7657f5,#a34fe1 55%,#e45cae);
+  box-shadow:0 4px 15px rgba(151,79,226,.34);
+}
+@keyframes chat-message-in{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:translateY(0)}}
+:root[data-theme="light"] .chat-content{
+  background:radial-gradient(ellipse at 12% 12%,rgba(160,112,255,.2),transparent 36%),radial-gradient(ellipse at 88% 18%,rgba(56,202,218,.16),transparent 34%),radial-gradient(ellipse at 72% 92%,rgba(244,119,190,.13),transparent 38%),linear-gradient(135deg,#f2edff,#eaf5ff 55%,#e7fafa);
+}
+:root[data-theme="light"] .chat-welcome{background:linear-gradient(110deg,rgba(130,99,229,.16),rgba(62,176,194,.13),rgba(219,105,174,.1));border-color:rgba(127,103,215,.2)}
+:root[data-theme="light"] .chat-welcome h1{color:#29234a}
+:root[data-theme="light"] .chat-welcome p{color:#625e82}
+:root[data-theme="light"] .chat-message>div:last-child{background:linear-gradient(135deg,rgba(255,255,255,.96),rgba(231,235,255,.96));border-color:rgba(129,111,213,.2);box-shadow:0 7px 18px rgba(75,74,150,.1)}
+:root[data-theme="light"] .chat-message b{color:#5b4b9a}
+:root[data-theme="light"] .chat-message p{color:#34324e}
+:root[data-theme="light"] .chat-message.message-own>div:last-child{background:linear-gradient(135deg,#8262e9,#4a9ec5);border-color:rgba(255,255,255,.35)}
+:root[data-theme="light"] .chat-message.message-own b,:root[data-theme="light"] .chat-message.message-own p{color:#fff}
+:root[data-theme="light"] .chat-composer{background:linear-gradient(110deg,rgba(255,255,255,.96),rgba(232,237,255,.96),rgba(226,248,249,.96));border-color:rgba(129,111,213,.24)}
+:root[data-theme="light"] .chat-composer input{color:#292541}
+@media(max-width:640px){
+  .chat-content{padding:16px 12px 14px;gap:0}
+  .chat-welcome{margin:0 0 3px;padding:11px 12px 15px;border-radius:14px}
+  .chat-messages{padding:16px 2px}
+  .chat-message>div:last-child{max-width:84%;padding:9px 11px}
+  .chat-message p{font-size:12px}
+  .chat-composer{margin-bottom:2px}
+}
+@media(prefers-reduced-motion:reduce){.chat-message{animation:none}}
