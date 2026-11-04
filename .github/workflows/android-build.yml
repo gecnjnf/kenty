@@ -24,7 +24,7 @@ jobs:
         run: |
           npx cap add android --project-dir web
           npx cap sync android --project-dir web
-          npx @capacitor/assets generate --assetPath web/assets --android
+          npx @capacitor/assets generate --assetPath web/assets --androidProject web/android --android
           node scripts/patch-native-permissions.cjs android
       - name: Build APK and AAB
         working-directory: web/android
