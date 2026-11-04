@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
-import { Room, RoomEvent, Track } from 'livekit-client';
 
 const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_ANON_KEY);
 const VOICE_ROOMS = [
@@ -37,8 +36,14 @@ export default function App() {
   const [participants, setParticipants] = useState([]);
   const [voiceError, setVoiceError] = useState('');
   const [voiceStatus, setVoiceStatus] = useState('Голосовые комнаты готовы к подключению');
-  const roomRef = useRef(null);
+  const voiceChannelRef = useRef(null);
+  const localStreamRef = useRef(null);
+  const peerConnectionsRef = useRef(new Map());
+  const offeredToRef = useRef(new Set());
+  const pendingCandidatesRef = useRef(new Map());
+  const audioElementsRef = useRef(new Map());
   const audioRef = useRef(null);
+  const participantNamesRef = useRef(new Map());
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session));
@@ -181,58 +186,192 @@ export default function App() {
   const voiceOwners = [{ id: session?.user?.id, label: 'Моя комната' }, ...friends.map(f => ({ id: f.person?.id, label: f.person?.display_name || f.person?.username || 'Друг' })).filter(x => x.id)];
   const activeVoiceOwner = voiceOwners.find(x => x.id === selectedVoiceOwnerId) || voiceOwners[0];
 
-  async function refreshParticipants(room) {
-    if (!room) return;
-    const people = [room.localParticipant, ...room.remoteParticipants.values()];
-    setParticipants(people.map(p => ({ id: p.identity, name: p.name || p.identity, muted: !p.isMicrophoneEnabled, speaking: p.isSpeaking, local: p === room.localParticipant })));
+  function updateVoiceParticipants() {
+    const channel = voiceChannelRef.current;
+    const state = channel?.presenceState?.() || {};
+    const peers = Object.values(state).flat().filter(p => p.userId && p.userId !== session?.user?.id);
+    const unique = new Map(peers.map(p => [p.userId, p]));
+    setParticipants([
+      { id: session.user.id, name: voiceName || profile?.display_name || profile?.username || 'Ты', muted: !micEnabled, speaking: false, local: true },
+      ...[...unique.values()].map(p => ({ id: p.userId, name: p.name || 'Участник', muted: false, speaking: false, local: false }))
+    ]);
+  }
+
+  async function sendVoiceSignal(to, signal) {
+    const channel = voiceChannelRef.current;
+    if (!channel) return;
+    await channel.send({ type: 'broadcast', event: 'signal', payload: { from: session.user.id, to, ...signal } });
+  }
+
+  function createPeerConnection(remoteId, remoteName = 'Участник') {
+    const existing = peerConnectionsRef.current.get(remoteId);
+    if (existing) return existing;
+    const pc = new RTCPeerConnection({
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun.cloudflare.com:3478' }
+      ]
+    });
+    const stream = localStreamRef.current;
+    stream?.getTracks().forEach(track => pc.addTrack(track, stream));
+    pc.onicecandidate = event => {
+      if (event.candidate) sendVoiceSignal(remoteId, { kind: 'candidate', candidate: event.candidate.toJSON() }).catch(() => {});
+    };
+    pc.ontrack = event => {
+      let audio = audioElementsRef.current.get(remoteId);
+      if (!audio) {
+        audio = document.createElement('audio');
+        audio.autoplay = true;
+        audio.playsInline = true;
+        audio.setAttribute('data-voice-peer', remoteId);
+        audioRef.current?.appendChild(audio);
+        audioElementsRef.current.set(remoteId, audio);
+      }
+      audio.srcObject = event.streams[0] || new MediaStream([event.track]);
+      audio.play().catch(() => setVoiceError('Нажми на экран, чтобы разрешить воспроизведение звука.'));
+    };
+    pc.onconnectionstatechange = () => {
+      if (pc.connectionState === 'failed') setVoiceError('Не удалось соединиться с одним из участников. Возможно, сети нужен TURN-сервер.');
+      if (pc.connectionState === 'connected') setVoiceError('');
+    };
+    peerConnectionsRef.current.set(remoteId, pc);
+    participantNamesRef.current.set(remoteId, remoteName);
+    return pc;
+  }
+
+  async function handleVoiceSignal(payload) {
+    if (!payload || payload.to !== session.user.id || !payload.from) return;
+    const pc = createPeerConnection(payload.from, participantNamesRef.current.get(payload.from) || 'Участник');
+    try {
+      if (payload.kind === 'offer') {
+        await pc.setRemoteDescription(new RTCSessionDescription(payload.description));
+        const queued = pendingCandidatesRef.current.get(payload.from) || [];
+        for (const candidate of queued) await pc.addIceCandidate(new RTCIceCandidate(candidate));
+        pendingCandidatesRef.current.delete(payload.from);
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        await sendVoiceSignal(payload.from, { kind: 'answer', description: pc.localDescription });
+      } else if (payload.kind === 'answer') {
+        if (pc.signalingState !== 'have-local-offer') return;
+        await pc.setRemoteDescription(new RTCSessionDescription(payload.description));
+        const queued = pendingCandidatesRef.current.get(payload.from) || [];
+        for (const candidate of queued) await pc.addIceCandidate(new RTCIceCandidate(candidate));
+        pendingCandidatesRef.current.delete(payload.from);
+      } else if (payload.kind === 'candidate') {
+        if (pc.remoteDescription) await pc.addIceCandidate(new RTCIceCandidate(payload.candidate));
+        else pendingCandidatesRef.current.set(payload.from, [...(pendingCandidatesRef.current.get(payload.from) || []), payload.candidate]);
+      }
+    } catch (signalError) {
+      console.error('KENTY voice signaling error:', signalError);
+      setVoiceError('Не удалось согласовать голосовое соединение. Попробуй выйти и зайти снова.');
+    }
   }
 
   async function joinVoiceRoom(e) {
-    e.preventDefault(); setVoiceError('');
+    e.preventDefault();
+    setVoiceError('');
     if (!voiceName.trim()) { setVoiceError('Введи своё имя.'); return; }
-    setJoining(true); setVoiceStatus('Подключаемся к комнате…');
-    let room;
+    if (!navigator.mediaDevices?.getUserMedia) { setVoiceError('Браузер не поддерживает доступ к микрофону. Открой KENTY по HTTPS.'); return; }
+    setJoining(true);
+    setVoiceStatus('Запрашиваем доступ к микрофону…');
     try {
-      const response = await fetch('/api/token', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-        body: JSON.stringify({ roomName: `${activeVoiceOwner?.id || session.user.id}:${selectedRoom.id}`, displayName: voiceName.trim() }) });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.error || 'Не удалось получить доступ к комнате.');
-      room = new Room({ adaptiveStream: true, dynacast: true }); roomRef.current = room;
-      const sync = () => refreshParticipants(room);
-      [RoomEvent.ParticipantConnected, RoomEvent.ParticipantDisconnected, RoomEvent.ActiveSpeakersChanged,
-       RoomEvent.LocalTrackPublished, RoomEvent.LocalTrackUnpublished].forEach(ev => room.on(ev, sync));
-      room.on(RoomEvent.TrackSubscribed, track => {
-        if (track.kind === Track.Kind.Audio && audioRef.current) {
-          const el = track.attach(); el.autoplay = true; el.playsInline = true; audioRef.current.appendChild(el);
-        } sync();
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }, video: false });
+      localStreamRef.current = stream;
+      const topic = `voice:${activeVoiceOwner?.id || session.user.id}:${selectedRoom.id}`;
+      const channel = supabase.channel(topic, {
+        config: { private: true, broadcast: { self: false, ack: true }, presence: { key: session.user.id } }
       });
-      room.on(RoomEvent.TrackUnsubscribed, track => { track.detach().forEach(el => el.remove()); sync(); });
-      room.on(RoomEvent.Disconnected, () => { setConnected(false); setParticipants([]); setVoiceStatus('Соединение завершено'); });
-      await room.connect(data.serverUrl, data.participantToken);
-      await room.localParticipant.setMicrophoneEnabled(true);
-      setConnected(true); setMicEnabled(true); setVoiceStatus('Ты в комнате «' + selectedRoom.label + '» · ' + (activeVoiceOwner?.label || 'Моя комната')); sync();
+      voiceChannelRef.current = channel;
+      channel.on('broadcast', { event: 'signal' }, ({ payload }) => { handleVoiceSignal(payload); });
+      channel.on('presence', { event: 'sync' }, async () => {
+        const state = channel.presenceState();
+        const peers = Object.values(state).flat().filter(p => p.userId && p.userId !== session.user.id);
+        for (const peer of peers) {
+          participantNamesRef.current.set(peer.userId, peer.name || 'Участник');
+          const pc = createPeerConnection(peer.userId, peer.name || 'Участник');
+          if (session.user.id < peer.userId && !offeredToRef.current.has(peer.userId) && pc.signalingState === 'stable') {
+            offeredToRef.current.add(peer.userId);
+            try {
+              const offer = await pc.createOffer();
+              await pc.setLocalDescription(offer);
+              await sendVoiceSignal(peer.userId, { kind: 'offer', description: pc.localDescription });
+            } catch (offerError) {
+              offeredToRef.current.delete(peer.userId);
+              console.error('KENTY voice offer error:', offerError);
+            }
+          }
+        }
+        updateVoiceParticipants();
+      });
+      const status = await new Promise((resolve, reject) => {
+        const timeout = window.setTimeout(() => reject(new Error('Сервер голосовой связи не ответил. Попробуй ещё раз.')), 12000);
+        channel.subscribe(result => {
+          if (result === 'SUBSCRIBED') { window.clearTimeout(timeout); resolve(result); }
+          if (result === 'CHANNEL_ERROR' || result === 'TIMED_OUT' || result === 'CLOSED') {
+            window.clearTimeout(timeout);
+            reject(new Error('Не удалось открыть голосовую комнату. Проверь доступ к комнате и подключение к интернету.'));
+          }
+        });
+      });
+      if (status !== 'SUBSCRIBED') throw new Error('Не удалось подключиться к голосовой комнате.');
+      await channel.track({ userId: session.user.id, name: voiceName.trim(), joinedAt: new Date().toISOString() });
+      setConnected(true);
+      setMicEnabled(true);
+      setVoiceStatus('Ты в комнате «' + selectedRoom.label + '» · ' + (activeVoiceOwner?.label || 'Моя комната'));
+      updateVoiceParticipants();
     } catch (e2) {
-      if (room) { try { await room.disconnect(); } catch {} }
-      roomRef.current = null; setConnected(false); setVoiceError(e2.message || 'Не удалось подключиться.');
+      const channel = voiceChannelRef.current;
+      voiceChannelRef.current = null;
+      if (channel) await supabase.removeChannel(channel).catch(() => {});
+      peerConnectionsRef.current.forEach(pc => pc.close());
+      peerConnectionsRef.current.clear();
+      offeredToRef.current.clear();
+      pendingCandidatesRef.current.clear();
+      localStreamRef.current?.getTracks().forEach(track => track.stop());
+      localStreamRef.current = null;
+      if (audioRef.current) audioRef.current.innerHTML = '';
+      setConnected(false);
+      setVoiceError(e2.message || 'Не удалось подключиться к голосовой комнате.');
       setVoiceStatus('Не удалось подключиться');
-    } finally { setJoining(false); }
+    } finally {
+      setJoining(false);
+    }
   }
 
   async function leaveVoiceRoom() {
-    const room = roomRef.current; roomRef.current = null;
-    if (room) { try { await room.disconnect(); } catch {} }
-    setConnected(false); setMicEnabled(false); setParticipants([]);
+    const channel = voiceChannelRef.current;
+    voiceChannelRef.current = null;
+    if (channel) await supabase.removeChannel(channel).catch(() => {});
+    peerConnectionsRef.current.forEach(pc => pc.close());
+    peerConnectionsRef.current.clear();
+    offeredToRef.current.clear();
+    pendingCandidatesRef.current.clear();
+    participantNamesRef.current.clear();
+    localStreamRef.current?.getTracks().forEach(track => track.stop());
+    localStreamRef.current = null;
+    audioElementsRef.current.forEach(audio => { audio.pause(); audio.srcObject = null; audio.remove(); });
+    audioElementsRef.current.clear();
     if (audioRef.current) audioRef.current.innerHTML = '';
+    setConnected(false);
+    setMicEnabled(false);
+    setParticipants([]);
+    setVoiceStatus('Ты вышел из комнаты');
   }
 
   async function toggleMic() {
-    const room = roomRef.current; if (!room) return;
+    const stream = localStreamRef.current;
+    if (!stream) return;
     const next = !micEnabled;
-    try { await room.localParticipant.setMicrophoneEnabled(next); setMicEnabled(next); refreshParticipants(room); }
-    catch { setVoiceError('Проверь разрешение браузера на микрофон.'); }
+    stream.getAudioTracks().forEach(track => { track.enabled = next; });
+    setMicEnabled(next);
+    updateVoiceParticipants();
   }
 
-  useEffect(() => () => { if (roomRef.current) roomRef.current.disconnect(); }, []);
+  useEffect(() => () => {
+    voiceChannelRef.current && supabase.removeChannel(voiceChannelRef.current);
+    peerConnectionsRef.current.forEach(pc => pc.close());
+    localStreamRef.current?.getTracks().forEach(track => track.stop());
+  }, []);
 
   if (!session) return (
     <main className="auth-screen">
@@ -315,7 +454,7 @@ export default function App() {
           <div className="voice-heading"><div><div className="eyebrow">REAL-TIME VOICE</div><h1>Голосовые комнаты</h1><p>Заходи к друзьям, общайся и оставайся на связи.</p></div><div className="voice-orb">♫</div></div>
           {!connected && <><div className="room-owner-picker"><label htmlFor="voice-owner">КОМНАТА КОГО</label><select id="voice-owner" value={activeVoiceOwner?.id || ''} onChange={e => setSelectedVoiceOwnerId(e.target.value)}>{voiceOwners.map(owner => <option key={owner.id} value={owner.id}>{owner.label}</option>)}</select><small>Войти можно только в свою комнату или комнату принятого друга.</small></div><div className="room-picker">{VOICE_ROOMS.map(r => <button type="button" key={r.id} className={'room-card ' + (selectedRoom.id === r.id ? 'active' : '')} onClick={() => setSelectedRoom(r)}><span className="room-card-icon">{r.icon}</span><span className="room-card-title">{r.label}</span><span className="room-card-description">{r.description}</span></button>)}</div></>}
           {!connected ? <form className="join-panel" onSubmit={joinVoiceRoom}><div className="panel-heading"><div><span className="eyebrow">ПОДКЛЮЧЕНИЕ</span><h2>Войти в «{selectedRoom.label}»</h2></div></div><div className="form-grid"><label><span>ТВОЁ ИМЯ</span><input value={voiceName} onChange={e => setVoiceName(e.target.value)} placeholder="Твоё имя" /></label></div>{voiceError && <div className="error-box">{voiceError}</div>}<div className="join-bottom"><div className="join-hint">Выбирай комнату и подключайся — код не нужен.</div><button className="primary-button" disabled={joining}>{joining ? 'Подключаем…' : 'Войти в комнату →'}</button></div></form> : <section className="live-panel"><div className="panel-heading"><div><span className="eyebrow">ТЫ В КОМНАТЕ</span><h2>{selectedRoom.label}</h2></div><span className="live-badge"><i /> В ЭФИРЕ</span></div><div className="participant-heading">УЧАСТНИКИ · {participants.length}</div><div className="participant-list">{participants.map(p => <div className="participant" key={p.id}><div className="participant-avatar">{p.name[0]?.toUpperCase()}</div><div className="participant-name"><b>{p.name}{p.local ? ' (ты)' : ''}</b><small>{p.speaking ? 'Говорит' : 'На связи'}</small></div><span className="mic-state">{p.muted ? 'Микрофон выкл.' : 'Микрофон вкл.'}</span></div>)}</div><div className="voice-controls"><button className="control-button" onClick={toggleMic}>{micEnabled ? 'Выключить микрофон' : 'Включить микрофон'}</button><button className="leave-button" onClick={leaveVoiceRoom}>Выйти из комнаты</button></div></section>}
-          <div className="status-line">{voiceStatus}</div><div className="alpha-note">Голосовые комнаты доступны только владельцу и его друзьям в KENTY.</div><div className="audio-bin" ref={audioRef} />
+          <div className="status-line">{voiceStatus}</div><div className="alpha-note">Голос идёт напрямую между участниками через WebRTC. Комнаты доступны владельцу и принятым друзьям.</div><div className="audio-bin" ref={audioRef} />
         </div>}
       </section>
     </main>
