@@ -762,3 +762,47 @@ html,body,#root{width:100%;min-height:100%;margin:0}body{background:#1e1f22;colo
 :root[data-theme="light"]{--ui-bg:#f2f3f5;--ui-panel:#fff;--ui-panel-2:#e3e5e8;--ui-text:#2e3338;background:#f2f3f5;color:#2e3338}:root[data-theme="light"] body,:root[data-theme="light"] .app-shell{background:#f2f3f5;color:#2e3338}:root[data-theme="light"] .sidebar{background:#e3e5e8}:root[data-theme="light"] .main-panel,:root[data-theme="light"] .topbar,:root[data-theme="light"] .chat-content{background:#fff}:root[data-theme="light"] .profile-card,:root[data-theme="light"] .search-panel,:root[data-theme="light"] .chat-composer,:root[data-theme="light"] .participant,:root[data-theme="light"] .theme-option{background:#f2f3f5}:root[data-theme="light"] .social-section,:root[data-theme="light"] .friend-stat,:root[data-theme="light"] .settings-card,:root[data-theme="light"] .room-card,:root[data-theme="light"] .join-panel,:root[data-theme="light"] .live-panel{background:#fff;border-color:#e3e5e8}:root[data-theme="light"] .topbar-title,:root[data-theme="light"] .chat-welcome h1,:root[data-theme="light"] .settings-hero h1,:root[data-theme="light"] .settings-card-heading h2{color:#2e3338}:root[data-theme="light"] .nav-item,:root[data-theme="light"] .conversation-link{color:#4e5058}:root[data-theme="light"] .nav-item.selected{background:#d5d8ff;color:#343b9b}:root[data-theme="light"] .chat-message p{color:#454950}:root[data-theme="light"] .chat-composer input{color:#2e3338}
 @media(max-width:760px){.app-shell{height:100dvh;min-height:0;overflow:hidden}.server-rail{display:none}.sidebar{width:205px;flex:0 0 205px;border-radius:0}.social-content,.voice-content,.settings-content{padding:18px 16px 28px}.topbar{height:54px;padding:0 15px}.chat-content{padding:0 15px 14px}}
 @media(max-width:540px){.app-shell{display:flex;flex-direction:column;height:100dvh;min-height:0;overflow:hidden}.sidebar{display:none}.main-panel{flex:1;min-height:0;width:100%;overflow:hidden}.topbar{height:52px;flex:none;padding:0 14px}.topbar-title{font-size:13px}.topbar-right{gap:6px}.connection-pill{max-width:125px;font-size:8px}.mobile-dock{display:grid;grid-template-columns:repeat(4,1fr);flex:none;z-index:30;padding:7px 8px calc(7px + env(safe-area-inset-bottom));background:#232428;border-top:1px solid #17181b}.mobile-dock button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-height:48px;border:0;border-radius:8px;background:transparent;color:#949ba4}.mobile-dock button span{font-size:20px;line-height:1.1}.mobile-dock button small{font-size:9px;font-weight:650}.mobile-dock button.active{color:#c7c9ff;background:#35375a}.social-content,.voice-content,.settings-content{width:100%;min-width:0;min-height:0;flex:1;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;padding:15px 13px calc(20px + env(safe-area-inset-bottom))}.friends-hero{min-height:175px;padding:19px 16px}.friends-hero-copy h1{font-size:24px}.friends-hero-art{opacity:.32}.friends-stats{gap:7px;margin:12px 0 22px}.friend-stat{padding:9px 7px;min-height:65px}.friend-stat b{font-size:17px}.friend-stat small{font-size:8px}.social-section{padding:13px;margin-top:12px}.social-section-heading h2{font-size:17px}.search-panel{display:flex;gap:5px;padding:7px}.search-panel input{min-width:0;font-size:11px}.search-panel .primary-button{padding:0 9px;font-size:9px}.person-row{flex-wrap:wrap;gap:8px}.person-row .small-action,.person-row .subtle-action{margin-left:auto}.chat-content{flex:1;min-height:0;overflow:hidden;padding:0 12px 12px}.chat-welcome{padding:15px 0}.chat-messages{min-height:0}.chat-composer{flex:none}.chat-composer input{min-width:0}.chat-composer button{padding:0 10px;font-size:9px}.voice-content{padding:16px 12px}.voice-heading h1{font-size:22px}.room-picker{grid-template-columns:1fr}.room-card{display:grid;grid-template-columns:25px 1fr;min-height:0;padding:11px}.room-card-icon{grid-row:span 2}.room-card-description{grid-column:2}.join-panel,.live-panel{padding:14px}.voice-controls{flex-wrap:wrap;justify-content:stretch}.voice-controls button{flex:1 1 100%;min-height:42px}.settings-hero h1{font-size:26px}.settings-card{padding:14px}.avatar-editor{gap:11px;flex-wrap:wrap}.theme-options{gap:8px}.theme-option{padding:9px}.theme-preview{height:58px}.noise-toggle{min-height:54px}}
+
+
+/* Fix friend search touch target and flex sizing on phones */
+@media (max-width: 540px) {
+  .search-panel {
+    display: flex;
+    align-items: stretch;
+    gap: 8px;
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+  }
+  .search-panel input {
+    display: block;
+    flex: 1 1 0%;
+    width: 0;
+    min-width: 0;
+    min-height: 44px;
+    box-sizing: border-box;
+    font-size: 16px;
+    touch-action: manipulation;
+  }
+  .search-panel button.primary-button {
+    display: inline-flex;
+    flex: 0 0 auto;
+    width: auto !important;
+    min-width: 108px;
+    min-height: 44px;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    position: relative;
+    z-index: 2;
+    padding: 0 11px;
+    white-space: nowrap;
+    font-size: 10px;
+    line-height: 1.2;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .search-panel button.primary-button:disabled {
+    opacity: .65;
+  }
+}
