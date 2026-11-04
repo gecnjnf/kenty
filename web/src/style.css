@@ -1166,3 +1166,44 @@ body{
   .message-time{font-size:9px}
   .chat-no-messages{font-size:12px;padding:20px 10px}
 }
+
+
+/* Profile editor and selectable KENTY accent palettes */
+.profile-edit-grid{display:grid;grid-template-columns:1fr 1.4fr;gap:14px;margin-top:18px}
+.profile-edit-grid label{display:flex;flex-direction:column;gap:8px;color:#aeb4c8;font-size:11px;font-weight:650}
+.profile-edit-grid input,.profile-edit-grid textarea{
+  width:100%;min-width:0;resize:vertical;border:1px solid rgba(151,137,255,.22);
+  border-radius:10px;background:rgba(12,15,25,.42);color:#f4f4ff;
+  padding:12px 13px;font:inherit;font-size:13px;outline:none;
+}
+.profile-edit-grid input:focus,.profile-edit-grid textarea:focus{border-color:#9a83ff;box-shadow:0 0 0 3px rgba(132,104,255,.14)}
+.profile-edit-footer{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-top:14px}
+.profile-edit-footer small{color:#929bad;font-size:10px}
+.accent-options{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:18px}
+.accent-option{display:flex;align-items:center;justify-content:center;gap:9px;min-height:48px;border:1px solid rgba(151,137,255,.2);border-radius:11px;background:rgba(255,255,255,.025);color:inherit;font-size:12px;font-weight:700}
+.accent-option i{width:13px;height:13px;border-radius:50%;box-shadow:0 0 13px currentColor}
+.accent-option.active{border-color:rgba(190,170,255,.65);background:rgba(150,120,255,.13);box-shadow:0 0 0 2px rgba(150,120,255,.1)}
+.accent-violet i{background:linear-gradient(135deg,#a35cff,#5d70ff);color:#8b69ff}
+.accent-ocean i{background:linear-gradient(135deg,#28d5cf,#3988ff);color:#2ccedb}
+.accent-sunset i{background:linear-gradient(135deg,#ff9b55,#ed4ca8);color:#ff7b82}
+:root[data-accent="ocean"] .primary-button,:root[data-accent="ocean"] .chat-composer button,:root[data-accent="ocean"] .small-action,:root[data-accent="ocean"] .download-main-button{
+  background:linear-gradient(110deg,#078fbd,#19b8b0 58%,#4b83ed);box-shadow:0 5px 18px rgba(16,170,195,.25)
+}
+:root[data-accent="ocean"] .nav-item.selected,:root[data-accent="ocean"] .mobile-dock button.active{background:linear-gradient(130deg,rgba(13,166,205,.3),rgba(49,202,185,.2));color:#e6ffff}
+:root[data-accent="ocean"] .eyebrow,:root[data-accent="ocean"] .hash{color:#56d7df}
+:root[data-accent="ocean"] .chat-welcome-icon{background:linear-gradient(140deg,#0aaec7,#4385ed)}
+:root[data-accent="sunset"] .primary-button,:root[data-accent="sunset"] .chat-composer button,:root[data-accent="sunset"] .small-action,:root[data-accent="sunset"] .download-main-button{
+  background:linear-gradient(110deg,#f28a43,#ed5d85 58%,#bd59d9);box-shadow:0 5px 18px rgba(238,100,119,.24)
+}
+:root[data-accent="sunset"] .nav-item.selected,:root[data-accent="sunset"] .mobile-dock button.active{background:linear-gradient(130deg,rgba(242,138,67,.25),rgba(226,82,151,.2));color:#fff0eb}
+:root[data-accent="sunset"] .eyebrow,:root[data-accent="sunset"] .hash{color:#ffad83}
+:root[data-accent="sunset"] .chat-welcome-icon{background:linear-gradient(140deg,#f28a43,#dc5bb0)}
+:root[data-theme="light"] .profile-edit-grid label{color:#625e78}
+:root[data-theme="light"] .profile-edit-grid input,:root[data-theme="light"] .profile-edit-grid textarea{background:#fff;color:#302b49;border-color:#ded8f5}
+:root[data-theme="light"] .accent-option{background:rgba(115,95,190,.035);border-color:#e0dcf0}
+@media(max-width:640px){
+  .profile-edit-grid{grid-template-columns:1fr}
+  .profile-edit-footer{align-items:stretch;flex-direction:column}
+  .profile-edit-footer .primary-button{width:100%}
+  .accent-options{grid-template-columns:1fr}
+}
