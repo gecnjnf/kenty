@@ -13,12 +13,9 @@ export default function App() {
   const [session, setSession] = useState(null);
   const [profile, setProfile] = useState(null);
   const [authMode, setAuthMode] = useState('login');
-  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [username, setUsername] = useState('');
   const [authBusy, setAuthBusy] = useState(false);
-  const [otpSent, setOtpSent] = useState(false);
-  const [otpCode, setOtpCode] = useState('');
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   const [tab, setTab] = useState('friends');
@@ -93,44 +90,21 @@ export default function App() {
   async function submitAuth(e) {
     e.preventDefault(); setError(''); setNotice(''); setAuthBusy(true);
     try {
-      if (authMode === 'signup') {
-        const clean = username.trim().toLowerCase();
-        if (!/^[a-z0-9_]{3,24}$/.test(clean)) throw new Error('Ник: 3–24 символа, только латиница, цифры и _.');
-        const { error: err } = await supabase.auth.signUp({
-          email: email.trim(), password,
-          options: { data: { username: clean, display_name: username.trim() } }
-        });
-        if (err) throw err;
-        setOtpSent(true);
-        setNotice('Мы отправили 6-значный код на твою почту. Введи его ниже.');
-      } else {
-        const { error: err } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
-        if (err) throw err;
-      }
-    } catch (e2) { setError(e2.message || 'Не удалось выполнить вход.'); }
-    finally { setAuthBusy(false); }
-  }
-
-  async function verifySignupCode(e) {
-    e.preventDefault(); setError(''); setNotice(''); setAuthBusy(true);
-    try {
-      const { error: err } = await supabase.auth.verifyOtp({
-        email: email.trim(), token: otpCode.trim(), type: 'signup'
+      const clean = username.trim().toLowerCase();
+      if (!/^[a-z0-9_]{3,24}$/.test(clean)) throw new Error('Ник: 3–24 символа, только латиница, цифры и _.');
+      if (password.length < 8) throw new Error('Пароль должен содержать минимум 8 символов.');
+      const { data, error: err } = await supabase.functions.invoke('username-auth', {
+        body: { action: authMode, username: clean, password }
       });
       if (err) throw err;
-      setNotice('Почта подтверждена. Добро пожаловать в KENTY!');
-      setOtpSent(false); setOtpCode('');
-    } catch (e2) { setError(e2.message || 'Не удалось подтвердить код.'); }
-    finally { setAuthBusy(false); }
-  }
-
-  async function resendSignupCode() {
-    setError(''); setNotice(''); setAuthBusy(true);
-    try {
-      const { error: err } = await supabase.auth.resend({ type: 'signup', email: email.trim() });
-      if (err) throw err;
-      setNotice('Новый код отправлен. Проверь почту и папку «Спам».');
-    } catch (e2) { setError(e2.message || 'Не удалось отправить код повторно.'); }
+      if (!data?.session?.access_token || !data?.session?.refresh_token) throw new Error(data?.error || 'Не удалось выполнить вход. Попробуй ещё раз.');
+      const { error: sessionError } = await supabase.auth.setSession({
+        access_token: data.session.access_token,
+        refresh_token: data.session.refresh_token
+      });
+      if (sessionError) throw sessionError;
+      setNotice(authMode === 'signup' ? 'Аккаунт KENTY создан. Добро пожаловать!' : 'С возвращением в KENTY!');
+    } catch (e2) { setError(e2.message || 'Не удалось выполнить вход.'); }
     finally { setAuthBusy(false); }
   }
 
@@ -263,23 +237,23 @@ export default function App() {
       <form className="auth-card" onSubmit={submitAuth}>
         <div className="brand-name auth-logo">KENTY</div>
         <div className="eyebrow">YOUR SPACE. YOUR PEOPLE.</div>
-        <h1>{otpSent ? 'Проверь почту' : authMode === 'login' ? 'С возвращением' : 'Создай аккаунт'}</h1>
-        <p className="auth-subtitle">{otpSent ? 'Введи 6-значный код из письма, чтобы подтвердить адрес.' : 'Общайся с друзьями, переписывайся и заходи в голосовые комнаты.'}</p>
-        {!otpSent && authMode === 'signup' && <label className="auth-label">НИКНЕЙМ<input value={username} onChange={e => setUsername(e.target.value)} placeholder="например, alex_01" maxLength={24} required /></label>}
-        <label className="auth-label">EMAIL<input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" required disabled={otpSent} /></label>
-        {!otpSent && <label className="auth-label">ПАРОЛЬ<input type="password" value={password} onChange={e => setPassword(e.target.value)} minLength={6} placeholder="Минимум 6 символов" required /></label>}
-        {otpSent && <form className="otp-form" onSubmit={verifySignupCode}>
-          <label className="auth-label">КОД ИЗ ПИСЬМА<input inputMode="numeric" autoComplete="one-time-code" value={otpCode} onChange={e => setOtpCode(e.target.value.replace(/\\D/g, '').slice(0, 6))} placeholder="123456" maxLength={6} minLength={6} required /></label>
-          <button className="primary-button auth-submit" disabled={authBusy || otpCode.length !== 6}>{authBusy ? 'Проверяем…' : 'Подтвердить почту →'}</button>
-          <button type="button" className="text-button" disabled={authBusy} onClick={resendSignupCode}>Отправить код ещё раз</button>
-        </form>}
+        <h1>{authMode === 'login' ? 'С возвращением' : 'Создай аккаунт'}</h1>
+        <p className="auth-subtitle">Общайся с друзьями, переписывайся и заходи в голосовые комнаты. Для KENTY нужна только пара ник + пароль.</p>
+        <label className="auth-label">НИКНЕЙМ
+          <input value={username} onChange={e => setUsername(e.target.value)} placeholder="например, alex_01" maxLength={24} autoComplete="username" required />
+        </label>
+        <label className="auth-label">ПАРОЛЬ
+          <input type="password" value={password} onChange={e => setPassword(e.target.value)} minLength={8} maxLength={72} placeholder="Минимум 8 символов" autoComplete={authMode === 'login' ? 'current-password' : 'new-password'} required />
+        </label>
         {error && <div className="error-box">{error}</div>}
         {notice && <div className="notice-box">{notice}</div>}
-        {!otpSent && <button className="primary-button auth-submit" disabled={authBusy}>{authBusy ? 'Подожди…' : authMode === 'login' ? 'Войти в KENTY →' : 'Создать аккаунт →'}</button>}
-        {!otpSent && <button type="button" className="text-button" onClick={() => { setAuthMode(authMode === 'login' ? 'signup' : 'login'); setError(''); setNotice(''); }}>
+        <button className="primary-button auth-submit" disabled={authBusy}>
+          {authBusy ? 'Подожди…' : authMode === 'login' ? 'Войти в KENTY →' : 'Создать аккаунт →'}
+        </button>
+        <button type="button" className="text-button" onClick={() => { setAuthMode(authMode === 'login' ? 'signup' : 'login'); setError(''); setNotice(''); }}>
           {authMode === 'login' ? 'Нет аккаунта? Зарегистрироваться' : 'Уже есть аккаунт? Войти'}
-        </button>}
-        {otpSent && <button type="button" className="text-button" onClick={() => { setOtpSent(false); setOtpCode(''); setError(''); setNotice(''); }}>Изменить почту</button>}
+        </button>
+        <p className="auth-subtitle">Важно: ник и пароль нужно запомнить. Восстановление пароля без почты или телефона пока недоступно.</p>
       </form>
     </main>
   );
