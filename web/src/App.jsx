@@ -255,41 +255,25 @@ export default function App() {
     setError('');
     setSearchMessage('');
     setSearchResults([]);
-    if (q.length < 2) {
-      setSearchMessage('Введи минимум 2 символа для поиска.');
-      return;
-    }
-    if (!session?.user?.id) {
-      setSearchMessage('Сначала войди в аккаунт.');
-      return;
-    }
+    if (q.length < 2) { setSearchMessage('Введи минимум 2 символа для поиска.'); return; }
+    if (!session?.user?.id) { setSearchMessage('Сначала войди в аккаунт.'); return; }
     setSearchBusy(true);
     try {
-      const pattern = '%' + q.replace(/[\\%_]/g, '\\  async function searchUsers(e) {
-    e.preventDefault(); setError('');
-    const q = search.trim();
-    if (q.length < 2) { setSearchResults([]); return; }
-    const { data, error: err } = await supabase.from('profiles')
-      .select('id,username,display_name,avatar_url').neq('id', session.user.id)
-      .or('username.ilike.%' + q + '%,display_name.ilike.%' + q + '%').limit(12);
-    if (err) setError(err.message);
-    else setSearchResults(data || []);
-  }') + '%';
       const columns = 'id,username,display_name,avatar_url';
-      const [byUsername, byName] = await Promise.all([
+      const pattern = '%' + q + '%';
+      const [users, names] = await Promise.all([
         supabase.from('profiles').select(columns).neq('id', session.user.id).ilike('username', pattern).limit(12),
         supabase.from('profiles').select(columns).neq('id', session.user.id).ilike('display_name', pattern).limit(12)
       ]);
-      const queryError = byUsername.error || byName.error;
-      if (queryError) throw queryError;
-      const unique = new Map();
-      [...(byUsername.data || []), ...(byName.data || [])].forEach(person => unique.set(person.id, person));
-      const results = [...unique.values()].slice(0, 12);
+      if (users.error) throw users.error;
+      if (names.error) throw names.error;
+      const found = new Map();
+      [...(users.data || []), ...(names.data || [])].forEach(person => found.set(person.id, person));
+      const results = [...found.values()].slice(0, 12);
       setSearchResults(results);
-      setSearchMessage(results.length ? `Найдено пользователей: ${results.length}` : 'Никого не нашли. Проверь написание ника или имени.');
+      setSearchMessage(results.length ? 'Найдено пользователей: ' + results.length : 'Никого не нашли. Проверь ник или имя.');
     } catch (err) {
       setError('Не удалось найти пользователей: ' + (err.message || 'ошибка запроса'));
-      setSearchMessage('Поиск не выполнен. Попробуй ещё раз.');
     } finally {
       setSearchBusy(false);
     }
