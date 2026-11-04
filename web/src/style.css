@@ -1135,3 +1135,34 @@ body{
   .chat-composer{margin-bottom:2px}
 }
 @media(prefers-reduced-motion:reduce){.chat-message{animation:none}}
+
+
+/* Chat usability: live timeline, readable timestamps and safe message wrapping */
+.chat-content{overflow:hidden;min-width:0}
+.chat-messages{
+  display:flex;flex-direction:column;flex:1;min-height:0;
+  overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;
+  scroll-behavior:smooth;
+}
+.chat-message{width:100%;min-width:0;max-width:100%}
+.chat-message>div:last-child{min-width:0;overflow-wrap:anywhere;word-break:break-word}
+.message-time{
+  display:block;margin-top:6px;text-align:right;
+  color:rgba(224,226,255,.62);font-size:10px;line-height:1.2;
+  font-variant-numeric:tabular-nums;
+}
+.chat-message.message-own .message-time{color:rgba(237,255,255,.72)}
+.chat-no-messages{
+  margin:auto;padding:28px 16px;text-align:center;
+  color:rgba(224,226,255,.72);font-size:13px;
+}
+:root[data-theme="light"] .message-time{color:#85819b}
+:root[data-theme="light"] .chat-no-messages{color:#77718f}
+.chat-composer input{min-width:0;flex:1}
+.chat-composer button{flex:none;min-height:40px;touch-action:manipulation}
+@media(max-width:540px){
+  .chat-messages{padding:14px 2px}
+  .chat-message{gap:8px}
+  .message-time{font-size:9px}
+  .chat-no-messages{font-size:12px;padding:20px 10px}
+}
