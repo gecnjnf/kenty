@@ -1,5 +1,3 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-
 :root{font-family:Inter,system-ui,sans-serif;color:#f4f5fa;background:#101116;font-synthesis:none;text-rendering:optimizeLegibility}
 *{box-sizing:border-box}
 body{margin:0;min-width:320px;min-height:100vh;background:#101116}
@@ -299,4 +297,24 @@ button:disabled{cursor:not-allowed;opacity:.6}
   .chat-composer button { min-width: 76px; padding: 0 10px; font-size: 10px; }
   .empty-state { font-size: 12px; }
   .global-error, .global-notice { margin: 8px 12px 0; }
+}
+
+
+/* Lightweight PWA install controls */
+.install-button {
+  flex: none;
+  border: 1px solid #514a80;
+  border-radius: 9px;
+  padding: 8px 12px;
+  color: #e9e5ff;
+  background: #292541;
+  font-size: 11px;
+  font-weight: 700;
+  transition: background .18s ease, border-color .18s ease;
+}
+.install-button:hover { background: #39315f; border-color: #8274ee; }
+.auth-install { margin: 14px 0 2px; }
+@media (max-width: 640px) {
+  .topbar-right { gap: 7px; }
+  .install-button { padding: 8px 9px; font-size: 10px; }
 }
