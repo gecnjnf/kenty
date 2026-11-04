@@ -1,6 +1,8 @@
 name: KENTY Windows desktop build
 on:
   workflow_dispatch:
+  pull_request:
+    paths: ['desktop/**','web/**','package.json','.github/workflows/desktop-build.yml']
   push:
     branches: [main]
     paths: ['desktop/**','web/**','package.json','.github/workflows/desktop-build.yml']
