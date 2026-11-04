@@ -23,6 +23,8 @@ export default function App() {
   const [search, setSearch] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [friendships, setFriendships] = useState([]);
+  const [onlineUserIds, setOnlineUserIds] = useState(() => new Set());
+  const onlineChannelRef = useRef(null);
   const [conversations, setConversations] = useState([]);
   const [selectedConversation, setSelectedConversation] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -101,6 +103,57 @@ export default function App() {
     if (!session?.user) { setProfile(null); return; }
     loadProfile();
     loadSocial();
+  }, [session?.user?.id]);
+
+  useEffect(() => {
+    const userId = session?.user?.id;
+    if (!userId) {
+      setOnlineUserIds(new Set());
+      return;
+    }
+
+    let active = true;
+    let channel;
+    const syncOnline = () => {
+      if (!active || !channel) return;
+      const state = channel.presenceState();
+      const ids = new Set(
+        Object.values(state).flat().map((presence) => presence.userId).filter(Boolean)
+      );
+      setOnlineUserIds(ids);
+    };
+
+    (async () => {
+      try {
+        const { data } = await supabase.auth.getSession();
+        const token = data.session?.access_token;
+        if (!token || !active) return;
+        await supabase.realtime.setAuth(token);
+        channel = supabase.channel('kenty:online', {
+          config: { private: true, presence: { key: userId } }
+        });
+        onlineChannelRef.current = channel;
+        channel.on('presence', { event: 'sync' }, syncOnline);
+        channel.subscribe(async (status) => {
+          if (!active || status !== 'SUBSCRIBED') return;
+          const { error: trackError } = await channel.track({
+            userId,
+            online_at: new Date().toISOString()
+          });
+          if (trackError) console.error('KENTY online presence error:', trackError);
+          syncOnline();
+        });
+      } catch (presenceError) {
+        console.error('KENTY online status connection error:', presenceError);
+      }
+    })();
+
+    return () => {
+      active = false;
+      if (onlineChannelRef.current === channel) onlineChannelRef.current = null;
+      if (channel) supabase.removeChannel(channel);
+      setOnlineUserIds(new Set());
+    };
   }, [session?.user?.id]);
 
   async function loadProfile() {
@@ -526,7 +579,7 @@ export default function App() {
           {!!searchResults.length && <section className="social-section"><h2>Результаты поиска</h2>{searchResults.map(p => <div className="person-row" key={p.id}><div className="participant-avatar">{(p.display_name || p.username)[0].toUpperCase()}</div><div className="participant-name"><b>{p.display_name || p.username}</b><small>@{p.username}</small></div><button className="small-action" onClick={() => sendRequest(p.id)}>Добавить</button></div>)}</section>}
           {incoming.length > 0 && <section className="social-section"><h2>Входящие заявки <span>{incoming.length}</span></h2>{incoming.map(f => <div className="person-row" key={f.id}><div className="participant-avatar">{(personForFriendship(f).display_name || '?')[0].toUpperCase()}</div><div className="participant-name"><b>{personForFriendship(f).display_name}</b><small>@{personForFriendship(f).username}</small></div><button className="small-action" onClick={() => respondRequest(f.id, 'accepted')}>Принять</button><button className="subtle-action" onClick={() => respondRequest(f.id, 'rejected')}>Отклонить</button></div>)}</section>}
           <section className="social-section"><h2>Мои друзья <span>{friends.length}</span></h2>
-            {friends.map(f => <div className="person-row" key={f.id}><div className="participant-avatar">{(personForFriendship(f).display_name || '?')[0].toUpperCase()}</div><div className="participant-name"><b>{personForFriendship(f).display_name}</b><small>@{personForFriendship(f).username}</small></div><button className="small-action" disabled={busy} onClick={() => openChat(personForFriendship(f))}>Написать</button></div>)}
+            {friends.map(f => <div className="person-row" key={f.id}><div className="participant-avatar">{(personForFriendship(f).display_name || '?')[0].toUpperCase()}</div><div className="participant-name"><b>{personForFriendship(f).display_name}</b><small>@{personForFriendship(f).username}</small><small className={'friend-presence ' + (onlineUserIds.has(personForFriendship(f).id) ? 'online' : '')}>{onlineUserIds.has(personForFriendship(f).id) ? '● В сети' : '○ Не в сети'}</small></div><button className="small-action" disabled={busy} onClick={() => openChat(personForFriendship(f))}>Написать</button></div>)}
             {!friends.length && <p className="empty-state">Пока нет друзей. Найди человека по нику выше.</p>}
           </section>
           {outgoing.length > 0 && <section className="social-section"><h2>Отправленные заявки</h2>{outgoing.map(f => <div className="person-row" key={f.id}><div className="participant-name"><b>{personForFriendship(f).display_name}</b><small>@{personForFriendship(f).username} · Ожидает ответа</small></div></div>)}</section>}
