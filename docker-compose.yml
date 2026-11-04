@@ -1,0 +1,5 @@
+services:
+  kenty-api:
+    build: ./server
+    ports:
+      - "3001:3001"
