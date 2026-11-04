@@ -1,0 +1,1 @@
+const{contextBridge}=require('electron');contextBridge.exposeInMainWorld('kentyDesktop',{isDesktop:true,notify:({title,body})=>{if(typeof title==='string'&&typeof body==='string')new Notification(title.slice(0,100),{body:body.slice(0,300)});}});
