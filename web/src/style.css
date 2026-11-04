@@ -1207,3 +1207,70 @@ body{
   .profile-edit-footer .primary-button{width:100%}
   .accent-options{grid-template-columns:1fr}
 }
+
+
+/* KENTY in-chat camera */
+.chat-composer{display:flex;align-items:center;gap:9px}
+.chat-composer .chat-camera-button{
+  flex:0 0 42px;width:42px;height:42px;display:grid;place-items:center;
+  padding:0;border:1px solid rgba(164,139,255,.28);border-radius:13px;
+  background:linear-gradient(145deg,rgba(137,105,255,.18),rgba(53,198,218,.12));
+  color:#e9e3ff;font-size:19px;cursor:pointer;touch-action:manipulation;
+  transition:transform .18s ease,border-color .18s ease,box-shadow .18s ease;
+}
+.chat-composer .chat-camera-button:hover{transform:translateY(-2px);border-color:rgba(177,154,255,.65);box-shadow:0 5px 20px rgba(132,103,255,.18)}
+.chat-image-open{display:block;max-width:min(360px,100%);padding:0;margin:8px 0 2px;border:0;background:transparent;cursor:zoom-in;text-align:left}
+.chat-image-message{display:block;max-width:100%;max-height:360px;width:auto;height:auto;object-fit:contain;border-radius:13px;border:1px solid rgba(180,166,255,.2);box-shadow:0 8px 24px rgba(0,0,0,.16)}
+.chat-image-loading{display:block;padding:22px 30px;border-radius:12px;background:rgba(130,115,190,.12);font-size:12px;color:var(--muted,#9c9ab1)}
+.camera-overlay,.image-lightbox{
+  position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;
+  padding:clamp(10px,3vw,28px);background:rgba(5,7,15,.88);
+  backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
+}
+.camera-modal{
+  width:min(720px,100%);max-height:calc(100dvh - 24px);display:flex;flex-direction:column;
+  overflow:hidden;border:1px solid rgba(168,145,255,.28);border-radius:24px;
+  background:linear-gradient(155deg,rgba(29,27,49,.98),rgba(13,17,31,.99));
+  box-shadow:0 30px 100px rgba(0,0,0,.55),0 0 50px rgba(119,88,255,.13);
+}
+.camera-modal-header{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:17px 20px}
+.camera-eyebrow{font-size:9px;font-weight:850;letter-spacing:.2em;color:#b79cff}
+.camera-modal-header h2{margin:4px 0 0;color:#f6f3ff;font-size:18px}
+.camera-close{width:38px;height:38px;border:1px solid rgba(255,255,255,.12);border-radius:12px;background:rgba(255,255,255,.07);color:#fff;font-size:25px;line-height:1;cursor:pointer}
+.camera-view{position:relative;display:grid;place-items:center;min-height:240px;max-height:min(66dvh,720px);aspect-ratio:4/3;overflow:hidden;background:#05070d}
+.camera-video,.camera-preview{display:block;width:100%;height:100%;max-height:min(66dvh,720px);object-fit:contain;background:#05070d}
+.camera-video{object-fit:cover}
+.camera-loading,.camera-error{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(88%,420px);padding:18px;border-radius:15px;background:rgba(12,14,25,.88);color:#f7f4ff;text-align:center;font-size:13px}
+.camera-error{display:flex;flex-direction:column;gap:12px;border:1px solid rgba(255,118,151,.3)}
+.camera-error button{align-self:center;border:0;border-radius:9px;padding:9px 15px;background:#7758db;color:white;font-weight:750}
+.camera-controls{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:18px 20px 21px}
+.camera-secondary{display:flex;align-items:center;gap:8px;min-width:120px;min-height:42px;padding:0 13px;border:1px solid rgba(172,153,255,.24);border-radius:12px;background:rgba(255,255,255,.055);color:#e9e4ff;font-size:12px;cursor:pointer}
+.camera-secondary:disabled{opacity:.45;cursor:not-allowed}
+.camera-shutter{width:66px;height:66px;flex:0 0 66px;display:grid;place-items:center;border:3px solid rgba(255,255,255,.9);border-radius:50%;background:rgba(255,255,255,.13);box-shadow:0 0 0 5px rgba(152,125,255,.18),0 0 28px rgba(143,113,255,.35);cursor:pointer;transition:transform .15s ease}
+.camera-shutter i{width:48px;height:48px;border-radius:50%;background:linear-gradient(145deg,#fff,#d8ccff)}
+.camera-shutter:active{transform:scale(.93)}
+.camera-shutter:disabled{opacity:.45;cursor:not-allowed}
+.camera-mode-label{min-width:120px;text-align:right;color:#b9b5cf;font-size:11px}
+.camera-send{min-height:46px;flex:1;max-width:260px;border:0;border-radius:13px;background:linear-gradient(110deg,#8b5cf6,#477cf4 58%,#26c7c9);color:#fff;font-size:13px;font-weight:850;box-shadow:0 8px 22px rgba(112,91,235,.28);cursor:pointer}
+.camera-send:disabled{opacity:.6;cursor:wait}
+.image-lightbox{z-index:1100;cursor:zoom-out}
+.image-lightbox>img{display:block;max-width:min(96vw,1400px);max-height:92dvh;object-fit:contain;border-radius:8px;box-shadow:0 25px 90px rgba(0,0,0,.55)}
+.image-lightbox>button{position:absolute;top:max(12px,env(safe-area-inset-top));right:max(14px,env(safe-area-inset-right));width:44px;height:44px;border:1px solid rgba(255,255,255,.22);border-radius:50%;background:rgba(0,0,0,.48);color:#fff;font-size:27px;cursor:pointer}
+:root[data-theme="light"] .chat-composer .chat-camera-button{color:#53418f;border-color:rgba(112,91,190,.24);background:linear-gradient(145deg,rgba(137,105,255,.12),rgba(53,198,218,.1))}
+@media(max-width:600px){
+  .camera-overlay{padding:0;align-items:stretch}
+  .camera-modal{width:100%;height:100dvh;max-height:100dvh;border-radius:0;border:0;justify-content:space-between;padding-bottom:env(safe-area-inset-bottom)}
+  .camera-modal-header{padding:calc(12px + env(safe-area-inset-top)) 16px 12px}
+  .camera-view{flex:1;min-height:0;max-height:none;aspect-ratio:auto}
+  .camera-video,.camera-preview{max-height:none}
+  .camera-controls{padding:18px 16px calc(20px + env(safe-area-inset-bottom));gap:8px}
+  .camera-secondary{min-width:0;max-width:116px;padding:0 9px;font-size:10px}
+  .camera-secondary span{max-width:76px}
+  .camera-shutter{width:62px;height:62px;flex-basis:62px}
+  .camera-shutter i{width:44px;height:44px}
+  .camera-mode-label{min-width:0;max-width:95px;font-size:10px}
+  .camera-send{font-size:12px;padding:0 12px}
+  .chat-image-open{max-width:min(76vw,320px)}
+  .chat-image-message{max-height:300px}
+}
+@media(prefers-reduced-motion:reduce){.chat-composer .chat-camera-button,.camera-shutter{transition:none}}
