@@ -719,3 +719,16 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline:2px soli
 :root[data-theme="light"] .chat-message p,:root[data-theme="light"] .chat-message b{color:#34394d}:root[data-theme="light"] .room-card-title{color:#202438}:root[data-theme="light"] .voice-heading p,:root[data-theme="light"] .settings-hero p,:root[data-theme="light"] .settings-card-heading p{color:#687087}
 :root[data-theme="light"] .connection-pill{background:#e9ebf4;color:#596176}:root[data-theme="light"] .chat-welcome{border-color:#e0e4ef}:root[data-theme="light"] .chat-welcome h1{color:#202438}:root[data-theme="light"] .form-grid input{background:#f7f8fc;color:#202438;border-color:#dfe3ee}
 @media(max-width:760px){.settings-content{padding:24px 16px 36px}}@media(max-width:540px){.settings-content{padding:18px 12px calc(24px + env(safe-area-inset-bottom))}.settings-card{padding:16px}.avatar-preview{width:76px;height:76px;border-radius:22px}.theme-preview{height:66px}}
+
+
+/* Voice noise suppression toggle */
+.noise-toggle{width:100%;display:flex;align-items:center;gap:12px;margin:14px 0 4px;padding:13px 15px;border:1px solid rgba(145,133,255,.2);border-radius:12px;background:rgba(255,255,255,.025);color:inherit;text-align:left;cursor:pointer;transition:border-color .18s,background .18s}
+.noise-toggle.active{border-color:rgba(111,218,169,.38);background:rgba(75,190,137,.07)}
+.noise-toggle-icon{width:34px;height:34px;display:grid;place-items:center;flex:none;border-radius:10px;background:rgba(139,124,255,.14);color:#bcb2ff;font-size:18px}
+.noise-toggle>span:nth-child(2){display:flex;flex:1;flex-direction:column;gap:4px;min-width:0}
+.noise-toggle b{font-size:12px}.noise-toggle small{color:#929bad;font-size:10px;line-height:1.4}
+.noise-toggle-state{font-size:9px;font-weight:800;letter-spacing:.8px;color:#929bad}
+.noise-toggle.active .noise-toggle-state{color:#70d9a7}
+.noise-live-button{border:1px solid rgba(145,133,255,.2)}
+.noise-live-button.noise-live-active{border-color:rgba(111,218,169,.35);background:rgba(75,190,137,.1);color:#8ce2b5}
+@media(max-width:540px){.noise-toggle{padding:11px 12px}.noise-toggle small{font-size:9px}}
