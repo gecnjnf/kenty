@@ -1,13 +1,8 @@
-import { randomUUID, timingSafeEqual } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { AccessToken } from 'livekit-server-sdk';
 
 const ALLOWED_ROOMS = new Set(['lobby', 'gaming', 'chill']);
 
-function safeEqual(a, b) {
-  const left = Buffer.from(String(a));
-  const right = Buffer.from(String(b));
-  return left.length === right.length && timingSafeEqual(left, right);
-}
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -19,7 +14,6 @@ export default async function handler(req, res) {
     const body = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {});
     const roomName = typeof body.roomName === 'string' ? body.roomName : '';
     const displayName = typeof body.displayName === 'string' ? body.displayName : '';
-    const accessCode = typeof body.accessCode === 'string' ? body.accessCode : '';
 
     if (!ALLOWED_ROOMS.has(roomName)) {
       return res.status(400).json({ error: 'Выбери одну из доступных голосовых комнат.' });
@@ -35,12 +29,18 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Имя должно содержать минимум 2 символа.' });
     }
 
-    const expectedCode = process.env.KENTY_VOICE_ACCESS_CODE;
-    if (!expectedCode) {
-      return res.status(503).json({ error: 'Голосовой сервер ещё не настроен: добавь переменные LiveKit в Vercel.' });
+    const authHeader = req.headers.authorization || '';
+    const bearer = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+    const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+    const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
+    if (!bearer || !supabaseUrl || !supabaseAnonKey) {
+      return res.status(401).json({ error: 'Войди в аккаунт KENTY, чтобы подключиться к голосовой комнате.' });
     }
-    if (!accessCode || !safeEqual(accessCode, expectedCode)) {
-      return res.status(401).json({ error: 'Неверный код доступа к голосовым комнатам.' });
+    const authResponse = await fetch(`${supabaseUrl}/auth/v1/user`, {
+      headers: { apikey: supabaseAnonKey, Authorization: `Bearer ${bearer}` }
+    });
+    if (!authResponse.ok) {
+      return res.status(401).json({ error: 'Сессия истекла. Войди в KENTY заново.' });
     }
 
     const apiKey = process.env.LIVEKIT_API_KEY;
