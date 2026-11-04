@@ -39,6 +39,7 @@ export default function App() {
   const [joining, setJoining] = useState(false);
   const [connected, setConnected] = useState(false);
   const [micEnabled, setMicEnabled] = useState(true);
+  const micEnabledRef = useRef(true);
   const [participants, setParticipants] = useState([]);
   const [voiceError, setVoiceError] = useState('');
   const [voiceStatus, setVoiceStatus] = useState('Голосовые комнаты готовы к подключению');
@@ -321,8 +322,8 @@ export default function App() {
     const peers = Object.values(state).flat().filter(p => p.userId && p.userId !== session?.user?.id);
     const unique = new Map(peers.map(p => [p.userId, p]));
     setParticipants([
-      { id: session.user.id, name: voiceName || profile?.display_name || profile?.username || 'Ты', muted: !micEnabled, speaking: false, local: true },
-      ...[...unique.values()].map(p => ({ id: p.userId, name: p.name || 'Участник', muted: false, speaking: false, local: false }))
+      { id: session.user.id, name: voiceName || profile?.display_name || profile?.username || 'Ты', muted: !micEnabledRef.current, speaking: false, local: true },
+      ...[...unique.values()].map(p => ({ id: p.userId, name: p.name || 'Участник', muted: Boolean(p.muted), speaking: false, local: false }))
     ]);
   }
 
@@ -455,12 +456,14 @@ export default function App() {
         });
       });
       if (status !== 'SUBSCRIBED') throw new Error('Не удалось подключиться к голосовой комнате.');
-      const presenceResult = await channel.track({ userId: session.user.id, name: voiceName.trim(), joinedAt: new Date().toISOString() });
+      micEnabledRef.current = true;
+      const presenceResult = await channel.track({ userId: session.user.id, name: voiceName.trim(), muted: false, joinedAt: new Date().toISOString() });
       if (presenceResult !== 'ok') {
         console.error('KENTY presence track failed:', presenceResult);
         throw new Error('Сервер подключил канал, но не зарегистрировал тебя в комнате. Статус: ' + String(presenceResult));
       }
       setConnected(true);
+      micEnabledRef.current = true;
       setMicEnabled(true);
       setVoiceStatus('Подключено к «' + selectedRoom.label + '» · ' + (activeVoiceOwner?.label || 'Моя комната'));
       updateVoiceParticipants();
@@ -499,18 +502,34 @@ export default function App() {
     audioElementsRef.current.clear();
     if (audioRef.current) audioRef.current.innerHTML = '';
     setConnected(false);
+    micEnabledRef.current = false;
     setMicEnabled(false);
     setParticipants([]);
     setVoiceStatus('Ты вышел из комнаты');
   }
 
-  async function toggleMic() {
+  function toggleMic() {
     const stream = localStreamRef.current;
-    if (!stream) return;
-    const next = !micEnabled;
-    stream.getAudioTracks().forEach(track => { track.enabled = next; });
+    if (!stream || !connected) return;
+    // Change the actual MediaStreamTrack synchronously; never wait for Realtime.
+    const tracks = stream.getAudioTracks();
+    if (!tracks.length) {
+      setVoiceError('Микрофон не найден. Выйди и подключись к комнате снова.');
+      return;
+    }
+    const next = !micEnabledRef.current;
+    micEnabledRef.current = next;
+    tracks.forEach(track => { track.enabled = next; });
     setMicEnabled(next);
-    updateVoiceParticipants();
+    setParticipants(current => current.map(p => p.local ? { ...p, muted: !next } : p));
+    setVoiceStatus(next ? 'Микрофон включён' : 'Микрофон выключен');
+    // Presence is only a status update. A slow network must not delay mute/unmute.
+    const channel = voiceChannelRef.current;
+    if (channel) {
+      channel.track({ userId: session.user.id, name: voiceName.trim(), muted: !next, joinedAt: new Date().toISOString() })
+        .then(() => updateVoiceParticipants())
+        .catch(err => console.warn('KENTY mic status sync:', err));
+    }
   }
 
   useEffect(() => () => {
