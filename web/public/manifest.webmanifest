@@ -11,6 +11,11 @@
   "background_color": "#101116",
   "theme_color": "#101116",
   "icons": [
-    { "src": "/icons/kenty.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+    {
+      "src": "/icons/kenty.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
   ]
 }
