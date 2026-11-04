@@ -9,6 +9,15 @@ function formatMessageTime(value) {
   return Number.isNaN(date.getTime()) ? '' : messageTimeFormatter.format(date);
 }
 
+const IMAGE_MESSAGE_PREFIX = 'kenty-image:v1:';
+
+function getImagePath(content) {
+  if (typeof content !== 'string' || !content.startsWith(IMAGE_MESSAGE_PREFIX)) return null;
+  const path = content.slice(IMAGE_MESSAGE_PREFIX.length);
+  const parts = path.split('/');
+  return parts.length === 3 && parts.every(Boolean) ? path : null;
+}
+
 const VOICE_ROOMS = [
   { id: 'lobby', label: 'Общая', description: 'Для разговоров обо всём', icon: '◉' },
   { id: 'gaming', label: 'Игровая', description: 'Собираемся поиграть', icon: '🎮' },
@@ -48,6 +57,17 @@ export default function App() {
   const messageLoadRequestRef = useRef(0);
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const [cameraFacing, setCameraFacing] = useState('environment');
+  const [cameraAttempt, setCameraAttempt] = useState(0);
+  const [cameraBusy, setCameraBusy] = useState(false);
+  const [cameraError, setCameraError] = useState('');
+  const [capturedPhoto, setCapturedPhoto] = useState(null);
+  const [cameraPreviewUrl, setCameraPreviewUrl] = useState('');
+  const [imageUrls, setImageUrls] = useState({});
+  const [expandedImage, setExpandedImage] = useState('');
+  const cameraVideoRef = useRef(null);
+  const cameraStreamRef = useRef(null);
 
   const [selectedRoom, setSelectedRoom] = useState(VOICE_ROOMS[0]);
   const [selectedVoiceOwnerId, setSelectedVoiceOwnerId] = useState('');
@@ -412,6 +432,100 @@ export default function App() {
     messagesEndRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'end' });
   }, [messages, selectedConversation?.id]);
 
+  useEffect(() => {
+    let active = true;
+    const imageMessages = messages.map(item => ({ id: item.id, path: getImagePath(item.content) })).filter(item => item.path);
+    if (!imageMessages.length) {
+      setImageUrls({});
+      return undefined;
+    }
+    (async () => {
+      const entries = await Promise.all(imageMessages.map(async item => {
+        const { data, error: signedError } = await supabase.storage.from('chat-media').createSignedUrl(item.path, 3600);
+        return [item.id, signedError ? '' : data?.signedUrl || ''];
+      }));
+      if (active) setImageUrls(current => ({ ...current, ...Object.fromEntries(entries) }));
+    })();
+    return () => { active = false; };
+  }, [messages]);
+
+  useEffect(() => {
+    if (!cameraOpen || capturedPhoto) return undefined;
+    let active = true;
+    let stream = null;
+    setCameraBusy(true);
+    setCameraError('');
+    (async () => {
+      try {
+        if (!navigator.mediaDevices?.getUserMedia) {
+          throw new Error('Камера недоступна. Открой KENTY через HTTPS в современном браузере.');
+        }
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: {
+            facingMode: { ideal: cameraFacing },
+            width: { ideal: 1920, max: 2560 },
+            height: { ideal: 1080, max: 1440 }
+          }
+        });
+        if (!active) {
+          stream.getTracks().forEach(track => track.stop());
+          return;
+        }
+        cameraStreamRef.current = stream;
+        const video = cameraVideoRef.current;
+        if (video) {
+          video.srcObject = stream;
+          await video.play().catch(() => {});
+        }
+      } catch (cameraFailure) {
+        if (active) {
+          const name = cameraFailure?.name;
+          setCameraError(name === 'NotAllowedError' || name === 'PermissionDeniedError'
+            ? 'Нет доступа к камере. Разреши использование камеры в настройках браузера и попробуй снова.'
+            : name === 'NotFoundError' || name === 'DevicesNotFoundError'
+              ? 'Камера не найдена на этом устройстве.'
+              : name === 'NotReadableError' || name === 'TrackStartError'
+                ? 'Камера уже используется другим приложением. Закрой его и повтори попытку.'
+                : cameraFailure?.message || 'Не удалось запустить камеру.');
+        }
+      } finally {
+        if (active) setCameraBusy(false);
+      }
+    })();
+    return () => {
+      active = false;
+      if (stream) stream.getTracks().forEach(track => track.stop());
+      if (cameraStreamRef.current === stream) cameraStreamRef.current = null;
+      if (cameraVideoRef.current) cameraVideoRef.current.srcObject = null;
+    };
+  }, [cameraOpen, cameraFacing, cameraAttempt, capturedPhoto]);
+
+  useEffect(() => {
+    if (!capturedPhoto) {
+      setCameraPreviewUrl('');
+      return undefined;
+    }
+    const url = URL.createObjectURL(capturedPhoto);
+    setCameraPreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [capturedPhoto]);
+
+  useEffect(() => {
+    const stopCamera = () => cameraStreamRef.current?.getTracks().forEach(track => track.stop());
+    const onVisibility = () => {
+      if (document.hidden && cameraOpen) {
+        stopCamera();
+        cameraStreamRef.current = null;
+        setCameraOpen(false);
+        setCapturedPhoto(null);
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
+  }, [cameraOpen]);
+
+
   async function loadMessages(id) {
     const requestId = ++messageLoadRequestRef.current;
     const { data, error: err } = await supabase.from('messages')
@@ -432,6 +546,94 @@ export default function App() {
         .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
         .slice(-100);
     });
+  }
+
+  function openChatCamera() {
+    if (!selectedConversation) return;
+    setCameraError('');
+    setCapturedPhoto(null);
+    setCameraFacing('environment');
+    setCameraAttempt(value => value + 1);
+    setCameraOpen(true);
+  }
+
+  function closeChatCamera() {
+    cameraStreamRef.current?.getTracks().forEach(track => track.stop());
+    cameraStreamRef.current = null;
+    setCameraOpen(false);
+    setCapturedPhoto(null);
+    setCameraError('');
+    setCameraBusy(false);
+  }
+
+  async function captureChatPhoto() {
+    const video = cameraVideoRef.current;
+    if (!video || !video.videoWidth || !video.videoHeight) {
+      setCameraError('Камера ещё запускается. Подожди немного.');
+      return;
+    }
+    const scale = Math.min(1, 1920 / Math.max(video.videoWidth, video.videoHeight));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(video.videoWidth * scale);
+    canvas.height = Math.round(video.videoHeight * scale);
+    const context = canvas.getContext('2d');
+    if (!context) {
+      setCameraError('Не удалось обработать снимок. Попробуй ещё раз.');
+      return;
+    }
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+    canvas.toBlob(blob => {
+      if (!blob) {
+        setCameraError('Не удалось создать фотографию. Попробуй ещё раз.');
+        return;
+      }
+      setCapturedPhoto(new File([blob], 'kenty-photo-' + Date.now() + '.jpg', { type: 'image/jpeg' }));
+      setCameraError('');
+    }, 'image/jpeg', 0.88);
+  }
+
+  async function sendCapturedPhoto() {
+    if (!capturedPhoto || !selectedConversation || !session?.user?.id) return;
+    if (!['image/jpeg','image/png','image/webp'].includes(capturedPhoto.type) || capturedPhoto.size > 8 * 1024 * 1024) {
+      setCameraError('Фотография должна быть JPG, PNG или WEBP размером до 8 МБ.');
+      return;
+    }
+    setCameraBusy(true);
+    setCameraError('');
+    const conversationId = selectedConversation.id;
+    const path = session.user.id + '/' + conversationId + '/' +
+      (crypto.randomUUID ? crypto.randomUUID() : Date.now() + '-' + Math.random().toString(36).slice(2)) + '.jpg';
+    try {
+      const { error: uploadError } = await supabase.storage.from('chat-media').upload(path, capturedPhoto, {
+        contentType: 'image/jpeg',
+        cacheControl: '3600',
+        upsert: false
+      });
+      if (uploadError) throw uploadError;
+      const { data: sent, error: messageError } = await supabase.from('messages').insert({
+        conversation_id: conversationId,
+        sender_id: session.user.id,
+        content: IMAGE_MESSAGE_PREFIX + path
+      }).select('id,sender_id,content,created_at').single();
+      if (messageError) {
+        await supabase.storage.from('chat-media').remove([path]);
+        throw messageError;
+      }
+      if (sent && activeConversationIdRef.current === conversationId) {
+        setMessages(current => {
+          const merged = new Map(current.map(item => [item.id, item]));
+          merged.set(sent.id, sent);
+          return [...merged.values()]
+            .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+            .slice(-100);
+        });
+      }
+      closeChatCamera();
+      setNotice('Фотография отправлена!');
+    } catch (photoError) {
+      setCameraError('Не удалось отправить фотографию: ' + (photoError.message || 'ошибка загрузки'));
+      setCameraBusy(false);
+    }
   }
 
   async function sendMessage(e) {
@@ -871,8 +1073,8 @@ export default function App() {
         {tab === 'chat' && <div className="chat-content">
           {!selectedConversation ? <div className="empty-state chat-empty"><h2>Твои сообщения</h2><p>Добавь друга и нажми «Написать», чтобы начать личную переписку.</p></div> : <>
             <div className="chat-welcome"><div className="chat-welcome-icon">#</div><h1>{selectedConversation.person?.display_name || selectedConversation.person?.username}</h1><p>Личная переписка KENTY</p></div>
-            <div className="chat-messages">{messages.map(m => <article className={"chat-message " + (m.sender_id === session.user.id ? "message-own" : "message-other")} key={m.id}><div className="message-avatar">{m.sender_id === session.user.id ? (profile?.avatar_url ? <img src={profile.avatar_url} alt="" /> : (profile?.username || 'Я')[0].toUpperCase()) : (selectedConversation.person?.avatar_url ? <img src={selectedConversation.person.avatar_url} alt="" /> : (selectedConversation.person?.username || 'Д')[0].toUpperCase())}</div><div><b>{m.sender_id === session.user.id ? 'Ты' : selectedConversation.person?.display_name || selectedConversation.person?.username}</b><p>{m.content}</p><time className="message-time" dateTime={m.created_at}>{formatMessageTime(m.created_at)}</time></div></article>)}{!messages.length && <p className="chat-no-messages">Пока тихо. Отправь первое сообщение 👋</p>}<div ref={messagesEndRef} /></div>
-            <form className="chat-composer" onSubmit={sendMessage}><input value={message} onChange={e => setMessage(e.target.value)} placeholder="Написать сообщение…" /><button type="submit">Отправить</button></form>
+            <div className="chat-messages">{messages.map(m => <article className={"chat-message " + (m.sender_id === session.user.id ? "message-own" : "message-other")} key={m.id}><div className="message-avatar">{m.sender_id === session.user.id ? (profile?.avatar_url ? <img src={profile.avatar_url} alt="" /> : (profile?.username || 'Я')[0].toUpperCase()) : (selectedConversation.person?.avatar_url ? <img src={selectedConversation.person.avatar_url} alt="" /> : (selectedConversation.person?.username || 'Д')[0].toUpperCase())}</div><div><b>{m.sender_id === session.user.id ? 'Ты' : selectedConversation.person?.display_name || selectedConversation.person?.username}</b>{getImagePath(m.content) ? <button type="button" className="chat-image-open" onClick={() => imageUrls[m.id] && setExpandedImage(imageUrls[m.id])} disabled={!imageUrls[m.id]} aria-label="Открыть фотографию">{imageUrls[m.id] ? <img className="chat-image-message" src={imageUrls[m.id]} alt="Фотография из переписки" loading="lazy" /> : <span className="chat-image-loading">Загружаем фотографию…</span>}</button> : <p>{m.content}</p>}<time className="message-time" dateTime={m.created_at}>{formatMessageTime(m.created_at)}</time></div></article>)}{!messages.length && <p className="chat-no-messages">Пока тихо. Отправь первое сообщение 👋</p>}<div ref={messagesEndRef} /></div>
+            <form className="chat-composer" onSubmit={sendMessage}><button type="button" className="chat-camera-button" onClick={openChatCamera} aria-label="Открыть камеру" title="Сделать фото">📷</button><input value={message} onChange={e => setMessage(e.target.value)} placeholder="Написать сообщение…" /><button type="submit">Отправить</button></form>
           </>}
         </div>}
 
@@ -909,6 +1111,29 @@ export default function App() {
           <div className="status-line">{voiceStatus}</div><div className="alpha-note">Голос идёт напрямую между участниками через WebRTC. Комнаты доступны владельцу и принятым друзьям.</div><div className="audio-bin" ref={audioRef} />
         </div>}
       </section>
+      {cameraOpen && <div className="camera-overlay" role="dialog" aria-modal="true" aria-label="Камера KENTY">
+        <div className="camera-modal">
+          <header className="camera-modal-header"><div><span className="camera-eyebrow">KENTY CAMERA</span><h2>{capturedPhoto ? 'Предпросмотр фото' : 'Сделать фотографию'}</h2></div><button type="button" className="camera-close" onClick={closeChatCamera} aria-label="Закрыть камеру">×</button></header>
+          <div className="camera-view">
+            {capturedPhoto && cameraPreviewUrl
+              ? <img className="camera-preview" src={cameraPreviewUrl} alt="Предпросмотр снимка" />
+              : <video ref={cameraVideoRef} className="camera-video" autoPlay playsInline muted />}
+            {cameraBusy && !capturedPhoto && <div className="camera-loading">Запускаем камеру…</div>}
+            {cameraError && <div className="camera-error" role="alert">{cameraError}<button type="button" onClick={() => { setCameraError(''); setCameraAttempt(value => value + 1); }}>Повторить</button></div>}
+          </div>
+          <div className="camera-controls">
+            {!capturedPhoto ? <>
+              <button type="button" className="camera-secondary" onClick={() => setCameraFacing(value => value === 'user' ? 'environment' : 'user')} disabled={cameraBusy} aria-label="Переключить камеру">↻ <span>Сменить камеру</span></button>
+              <button type="button" className="camera-shutter" onClick={captureChatPhoto} disabled={cameraBusy || !!cameraError} aria-label="Сфотографировать"><i /></button>
+              <span className="camera-mode-label">{cameraFacing === 'user' ? 'Фронтальная' : 'Основная'}</span>
+            </> : <>
+              <button type="button" className="camera-secondary" onClick={() => setCapturedPhoto(null)}>↶ <span>Переснять</span></button>
+              <button type="button" className="camera-send" onClick={sendCapturedPhoto} disabled={cameraBusy}>{cameraBusy ? 'Отправляем…' : 'Отправить фото ➤'}</button>
+            </>}
+          </div>
+        </div>
+      </div>}
+      {expandedImage && <div className="image-lightbox" role="dialog" aria-modal="true" aria-label="Просмотр фотографии" onClick={() => setExpandedImage('')}><button type="button" aria-label="Закрыть фотографию" onClick={() => setExpandedImage('')}>×</button><img src={expandedImage} alt="Фотография из переписки" onClick={e => e.stopPropagation()} /></div>}
       <nav className="mobile-dock" aria-label="Основная навигация">
         <button type="button" className={tab === 'friends' ? 'active' : ''} onClick={() => setTab('friends')}><span>♧</span><small>Друзья</small></button>
         <button type="button" className={tab === 'chat' ? 'active' : ''} onClick={() => setTab('chat')}><span>▤</span><small>Чаты</small></button>
