@@ -24,6 +24,8 @@ export default function App() {
   const [avatarBusy, setAvatarBusy] = useState(false);
   const [search, setSearch] = useState('');
   const [searchResults, setSearchResults] = useState([]);
+  const [searchBusy, setSearchBusy] = useState(false);
+  const [searchMessage, setSearchMessage] = useState('');
   const [friendships, setFriendships] = useState([]);
   const [onlineUserIds, setOnlineUserIds] = useState(() => new Set());
   const onlineChannelRef = useRef(null);
@@ -248,6 +250,22 @@ export default function App() {
   async function logout() { await leaveVoiceRoom(); await supabase.auth.signOut(); setProfile(null); }
 
   async function searchUsers(e) {
+    e.preventDefault();
+    const q = search.trim();
+    setError('');
+    setSearchMessage('');
+    setSearchResults([]);
+    if (q.length < 2) {
+      setSearchMessage('Введи минимум 2 символа для поиска.');
+      return;
+    }
+    if (!session?.user?.id) {
+      setSearchMessage('Сначала войди в аккаунт.');
+      return;
+    }
+    setSearchBusy(true);
+    try {
+      const pattern = '%' + q.replace(/[\\%_]/g, '\\  async function searchUsers(e) {
     e.preventDefault(); setError('');
     const q = search.trim();
     if (q.length < 2) { setSearchResults([]); return; }
@@ -256,6 +274,25 @@ export default function App() {
       .or('username.ilike.%' + q + '%,display_name.ilike.%' + q + '%').limit(12);
     if (err) setError(err.message);
     else setSearchResults(data || []);
+  }') + '%';
+      const columns = 'id,username,display_name,avatar_url';
+      const [byUsername, byName] = await Promise.all([
+        supabase.from('profiles').select(columns).neq('id', session.user.id).ilike('username', pattern).limit(12),
+        supabase.from('profiles').select(columns).neq('id', session.user.id).ilike('display_name', pattern).limit(12)
+      ]);
+      const queryError = byUsername.error || byName.error;
+      if (queryError) throw queryError;
+      const unique = new Map();
+      [...(byUsername.data || []), ...(byName.data || [])].forEach(person => unique.set(person.id, person));
+      const results = [...unique.values()].slice(0, 12);
+      setSearchResults(results);
+      setSearchMessage(results.length ? `Найдено пользователей: ${results.length}` : 'Никого не нашли. Проверь написание ника или имени.');
+    } catch (err) {
+      setError('Не удалось найти пользователей: ' + (err.message || 'ошибка запроса'));
+      setSearchMessage('Поиск не выполнен. Попробуй ещё раз.');
+    } finally {
+      setSearchBusy(false);
+    }
   }
 
   async function sendRequest(userId) {
@@ -710,8 +747,9 @@ export default function App() {
             <div className="friend-stat"><span className="friend-stat-icon request-stat-icon">✉</span><div><b>{incoming.length}</b><small>Новых заявок</small></div></div>
           </div>
           <div className="social-section-heading"><div><span className="eyebrow">ПОИСК ПО KENTY</span><h2>Найди своих</h2></div><span className="section-heading-mark">⌕</span></div>
-          <form className="search-panel" onSubmit={searchUsers}><span className="search-panel-icon">⌕</span><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Найти по нику или имени…" /><button className="primary-button">Найти друзей <span>→</span></button></form>
-          {!!searchResults.length && <section className="social-section"><h2>Результаты поиска</h2>{searchResults.map(p => <div className="person-row" key={p.id}><div className="participant-avatar">{p.avatar_url ? <img src={p.avatar_url} alt="" /> : (p.display_name || p.username)[0].toUpperCase()}</div><div className="participant-name"><b>{p.display_name || p.username}</b><small>@{p.username}</small></div><button className="small-action" onClick={() => sendRequest(p.id)}>Добавить</button></div>)}</section>}
+          <form className="search-panel" onSubmit={searchUsers}><span className="search-panel-icon">⌕</span><input value={search} onChange={e => { setSearch(e.target.value); setSearchMessage(''); }} placeholder="Найти по нику или имени…" /><button type="submit" className="primary-button" disabled={searchBusy}>{searchBusy ? 'Ищем…' : 'Найти друзей'} <span>→</span></button></form>
+          {searchMessage && <p className="search-feedback" role="status">{searchMessage}</p>}
+          {!!searchResults.length && <section className="social-section"><h2>Результаты поиска</h2>{searchResults.map(p => <div className="person-row" key={p.id}><div className="participant-avatar">{p.avatar_url ? <img src={p.avatar_url} alt="" /> : (p.display_name || p.username)[0].toUpperCase()}</div><div className="participant-name"><b>{p.display_name || p.username}</b><small>@{p.username}</small></div><button type="button" className="small-action" onClick={() => sendRequest(p.id)}>Добавить</button></div>)}</section>}
           {incoming.length > 0 && <section className="social-section"><h2>Входящие заявки <span>{incoming.length}</span></h2>{incoming.map(f => <div className="person-row" key={f.id}><div className="participant-avatar">{personForFriendship(f).avatar_url ? <img src={personForFriendship(f).avatar_url} alt="" /> : (personForFriendship(f).display_name || '?')[0].toUpperCase()}</div><div className="participant-name"><b>{personForFriendship(f).display_name}</b><small>@{personForFriendship(f).username}</small></div><button className="small-action" onClick={() => respondRequest(f.id, 'accepted')}>Принять</button><button className="subtle-action" onClick={() => respondRequest(f.id, 'rejected')}>Отклонить</button></div>)}</section>}
           <section className="social-section"><h2>Мои друзья <span>{friends.length}</span></h2>
             {friends.map(f => <div className="person-row" key={f.id}><div className={'participant-avatar friend-avatar ' + (onlineUserIds.has(personForFriendship(f).id) ? 'friend-avatar-online' : '')}>{personForFriendship(f).avatar_url ? <img src={personForFriendship(f).avatar_url} alt="" /> : (personForFriendship(f).display_name || '?')[0].toUpperCase()}<i /></div><div className="participant-name"><b>{personForFriendship(f).display_name}</b><small>@{personForFriendship(f).username}</small><small className={'friend-presence ' + (onlineUserIds.has(personForFriendship(f).id) ? 'online' : '')}>{onlineUserIds.has(personForFriendship(f).id) ? '● В сети' : '○ Не в сети'}</small></div><button className="small-action" disabled={busy} onClick={() => openChat(personForFriendship(f))}>Написать</button></div>)}
