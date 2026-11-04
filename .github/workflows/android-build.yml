@@ -1,0 +1,36 @@
+name: KENTY Android builds
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['web/**','package.json','.github/workflows/android-build.yml']
+permissions:
+  contents: read
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: 22,cache: npm}
+      - uses: actions/setup-java@v4
+        with: {distribution: temurin,java-version: '21'}
+      - uses: android-actions/setup-android@v3
+      - run: npm install
+      - run: npm run build
+      - name: Generate Android project
+        run: |
+          npx cap add android --project-dir web
+          npx cap sync android --project-dir web
+      - name: Build APK and AAB
+        working-directory: web/android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug bundleRelease
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kenty-android-${{ github.sha }}
+          path: |
+            web/android/app/build/outputs/apk/debug/app-debug.apk
+            web/android/app/build/outputs/bundle/release/app-release.aab
+          if-no-files-found: error
