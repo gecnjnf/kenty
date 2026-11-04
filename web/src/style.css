@@ -376,3 +376,15 @@ button:disabled{cursor:not-allowed;opacity:.6}
   .download-card { flex: none; margin-top: 13px; padding: 17px; gap: 11px; }
   .download-card-copy h2 { font-size: 16px; }
 }
+
+
+/* Friends online presence */
+.friend-presence {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 3px;
+  color: #858b9c;
+  font-size: 10px;
+}
+.friend-presence.online { color: #59d99a; }
