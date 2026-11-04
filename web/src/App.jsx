@@ -745,6 +745,12 @@ export default function App() {
           <div className="status-line">{voiceStatus}</div><div className="alpha-note">Голос идёт напрямую между участниками через WebRTC. Комнаты доступны владельцу и принятым друзьям.</div><div className="audio-bin" ref={audioRef} />
         </div>}
       </section>
+      <nav className="mobile-dock" aria-label="Основная навигация">
+        <button type="button" className={tab === 'friends' ? 'active' : ''} onClick={() => setTab('friends')}><span>♧</span><small>Друзья</small></button>
+        <button type="button" className={tab === 'chat' ? 'active' : ''} onClick={() => setTab('chat')}><span>▤</span><small>Чаты</small></button>
+        <button type="button" className={tab === 'voice' ? 'active' : ''} onClick={() => setTab('voice')}><span>◖</span><small>Голос</small></button>
+        <button type="button" className={tab === 'settings' ? 'active' : ''} onClick={() => setTab('settings')}><span>⚙</span><small>Настройки</small></button>
+      </nav>
     </main>
   );
 }
