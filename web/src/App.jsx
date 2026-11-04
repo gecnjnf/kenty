@@ -17,6 +17,8 @@ export default function App() {
   const [password, setPassword] = useState('');
   const [username, setUsername] = useState('');
   const [authBusy, setAuthBusy] = useState(false);
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpCode, setOtpCode] = useState('');
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   const [tab, setTab] = useState('friends');
@@ -99,12 +101,36 @@ export default function App() {
           options: { data: { username: clean, display_name: username.trim() } }
         });
         if (err) throw err;
-        setNotice('Аккаунт создан. Если включено подтверждение почты, проверь входящие письма.');
+        setOtpSent(true);
+        setNotice('Мы отправили 6-значный код на твою почту. Введи его ниже.');
       } else {
         const { error: err } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
         if (err) throw err;
       }
     } catch (e2) { setError(e2.message || 'Не удалось выполнить вход.'); }
+    finally { setAuthBusy(false); }
+  }
+
+  async function verifySignupCode(e) {
+    e.preventDefault(); setError(''); setNotice(''); setAuthBusy(true);
+    try {
+      const { error: err } = await supabase.auth.verifyOtp({
+        email: email.trim(), token: otpCode.trim(), type: 'signup'
+      });
+      if (err) throw err;
+      setNotice('Почта подтверждена. Добро пожаловать в KENTY!');
+      setOtpSent(false); setOtpCode('');
+    } catch (e2) { setError(e2.message || 'Не удалось подтвердить код.'); }
+    finally { setAuthBusy(false); }
+  }
+
+  async function resendSignupCode() {
+    setError(''); setNotice(''); setAuthBusy(true);
+    try {
+      const { error: err } = await supabase.auth.resend({ type: 'signup', email: email.trim() });
+      if (err) throw err;
+      setNotice('Новый код отправлен. Проверь почту и папку «Спам».');
+    } catch (e2) { setError(e2.message || 'Не удалось отправить код повторно.'); }
     finally { setAuthBusy(false); }
   }
 
@@ -237,17 +263,23 @@ export default function App() {
       <form className="auth-card" onSubmit={submitAuth}>
         <div className="brand-name auth-logo">KENTY</div>
         <div className="eyebrow">YOUR SPACE. YOUR PEOPLE.</div>
-        <h1>{authMode === 'login' ? 'С возвращением' : 'Создай аккаунт'}</h1>
-        <p className="auth-subtitle">Общайся с друзьями, переписывайся и заходи в голосовые комнаты.</p>
-        {authMode === 'signup' && <label className="auth-label">НИКНЕЙМ<input value={username} onChange={e => setUsername(e.target.value)} placeholder="например, alex_01" maxLength={24} required /></label>}
-        <label className="auth-label">EMAIL<input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" required /></label>
-        <label className="auth-label">ПАРОЛЬ<input type="password" value={password} onChange={e => setPassword(e.target.value)} minLength={6} placeholder="Минимум 6 символов" required /></label>
+        <h1>{otpSent ? 'Проверь почту' : authMode === 'login' ? 'С возвращением' : 'Создай аккаунт'}</h1>
+        <p className="auth-subtitle">{otpSent ? 'Введи 6-значный код из письма, чтобы подтвердить адрес.' : 'Общайся с друзьями, переписывайся и заходи в голосовые комнаты.'}</p>
+        {!otpSent && authMode === 'signup' && <label className="auth-label">НИКНЕЙМ<input value={username} onChange={e => setUsername(e.target.value)} placeholder="например, alex_01" maxLength={24} required /></label>}
+        <label className="auth-label">EMAIL<input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" required disabled={otpSent} /></label>
+        {!otpSent && <label className="auth-label">ПАРОЛЬ<input type="password" value={password} onChange={e => setPassword(e.target.value)} minLength={6} placeholder="Минимум 6 символов" required /></label>}
+        {otpSent && <form className="otp-form" onSubmit={verifySignupCode}>
+          <label className="auth-label">КОД ИЗ ПИСЬМА<input inputMode="numeric" autoComplete="one-time-code" value={otpCode} onChange={e => setOtpCode(e.target.value.replace(/\\D/g, '').slice(0, 6))} placeholder="123456" maxLength={6} minLength={6} required /></label>
+          <button className="primary-button auth-submit" disabled={authBusy || otpCode.length !== 6}>{authBusy ? 'Проверяем…' : 'Подтвердить почту →'}</button>
+          <button type="button" className="text-button" disabled={authBusy} onClick={resendSignupCode}>Отправить код ещё раз</button>
+        </form>}
         {error && <div className="error-box">{error}</div>}
         {notice && <div className="notice-box">{notice}</div>}
-        <button className="primary-button auth-submit" disabled={authBusy}>{authBusy ? 'Подожди…' : authMode === 'login' ? 'Войти в KENTY →' : 'Создать аккаунт →'}</button>
-        <button type="button" className="text-button" onClick={() => { setAuthMode(authMode === 'login' ? 'signup' : 'login'); setError(''); setNotice(''); }}>
+        {!otpSent && <button className="primary-button auth-submit" disabled={authBusy}>{authBusy ? 'Подожди…' : authMode === 'login' ? 'Войти в KENTY →' : 'Создать аккаунт →'}</button>}
+        {!otpSent && <button type="button" className="text-button" onClick={() => { setAuthMode(authMode === 'login' ? 'signup' : 'login'); setError(''); setNotice(''); }}>
           {authMode === 'login' ? 'Нет аккаунта? Зарегистрироваться' : 'Уже есть аккаунт? Войти'}
-        </button>
+        </button>}
+        {otpSent && <button type="button" className="text-button" onClick={() => { setOtpSent(false); setOtpCode(''); setError(''); setNotice(''); }}>Изменить почту</button>}
       </form>
     </main>
   );
