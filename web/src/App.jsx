@@ -30,7 +30,6 @@ export default function App() {
 
   const [selectedRoom, setSelectedRoom] = useState(VOICE_ROOMS[0]);
   const [voiceName, setVoiceName] = useState('');
-  const [accessCode, setAccessCode] = useState('');
   const [joining, setJoining] = useState(false);
   const [connected, setConnected] = useState(false);
   const [micEnabled, setMicEnabled] = useState(true);
@@ -187,12 +186,12 @@ export default function App() {
 
   async function joinVoiceRoom(e) {
     e.preventDefault(); setVoiceError('');
-    if (!voiceName.trim() || !accessCode.trim()) { setVoiceError('Введи имя и код доступа.'); return; }
+    if (!voiceName.trim()) { setVoiceError('Введи своё имя.'); return; }
     setJoining(true); setVoiceStatus('Подключаемся к комнате…');
     let room;
     try {
-      const response = await fetch('/api/token', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ roomName: selectedRoom.id, displayName: voiceName.trim(), accessCode }) });
+      const response = await fetch('/api/token', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ roomName: selectedRoom.id, displayName: voiceName.trim() }) });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || 'Не удалось получить доступ к комнате.');
       room = new Room({ adaptiveStream: true, dynacast: true }); roomRef.current = room;
@@ -312,8 +311,8 @@ export default function App() {
         {tab === 'voice' && <div className="voice-content">
           <div className="voice-heading"><div><div className="eyebrow">REAL-TIME VOICE</div><h1>Голосовые комнаты</h1><p>Заходи к друзьям, общайся и оставайся на связи.</p></div><div className="voice-orb">♫</div></div>
           {!connected && <div className="room-picker">{VOICE_ROOMS.map(r => <button key={r.id} className={'room-card ' + (selectedRoom.id === r.id ? 'active' : '')} onClick={() => setSelectedRoom(r)}><span className="room-card-icon">{r.icon}</span><span className="room-card-title">{r.label}</span><span className="room-card-description">{r.description}</span></button>)}</div>}
-          {!connected ? <form className="join-panel" onSubmit={joinVoiceRoom}><div className="panel-heading"><div><span className="eyebrow">ПОДКЛЮЧЕНИЕ</span><h2>Войти в «{selectedRoom.label}»</h2></div></div><div className="form-grid"><label><span>ТВОЁ ИМЯ</span><input value={voiceName} onChange={e => setVoiceName(e.target.value)} placeholder="Твоё имя" /></label><label><span>КОД ДОСТУПА</span><input value={accessCode} onChange={e => setAccessCode(e.target.value)} type="password" placeholder="Общий код доступа" /></label></div>{voiceError && <div className="error-box">{voiceError}</div>}<div className="join-bottom"><div className="join-hint">Для голосовой альфа-версии пока нужен общий код.</div><button className="primary-button" disabled={joining}>{joining ? 'Подключаем…' : 'Войти в комнату →'}</button></div></form> : <section className="live-panel"><div className="panel-heading"><div><span className="eyebrow">ТЫ В КОМНАТЕ</span><h2>{selectedRoom.label}</h2></div><span className="live-badge"><i /> В ЭФИРЕ</span></div><div className="participant-heading">УЧАСТНИКИ · {participants.length}</div><div className="participant-list">{participants.map(p => <div className="participant" key={p.id}><div className="participant-avatar">{p.name[0]?.toUpperCase()}</div><div className="participant-name"><b>{p.name}{p.local ? ' (ты)' : ''}</b><small>{p.speaking ? 'Говорит' : 'На связи'}</small></div><span className="mic-state">{p.muted ? 'Микрофон выкл.' : 'Микрофон вкл.'}</span></div>)}</div><div className="voice-controls"><button className="control-button" onClick={toggleMic}>{micEnabled ? 'Выключить микрофон' : 'Включить микрофон'}</button><button className="leave-button" onClick={leaveVoiceRoom}>Выйти из комнаты</button></div></section>}
-          <div className="status-line">{voiceStatus}</div><div className="alpha-note">Голосовые комнаты пока используют общий код доступа. Аккаунты KENTY уже работают отдельно.</div><div className="audio-bin" ref={audioRef} />
+          {!connected ? <form className="join-panel" onSubmit={joinVoiceRoom}><div className="panel-heading"><div><span className="eyebrow">ПОДКЛЮЧЕНИЕ</span><h2>Войти в «{selectedRoom.label}»</h2></div></div><div className="form-grid"><label><span>ТВОЁ ИМЯ</span><input value={voiceName} onChange={e => setVoiceName(e.target.value)} placeholder="Твоё имя" /></label></div>{voiceError && <div className="error-box">{voiceError}</div>}<div className="join-bottom"><div className="join-hint">Выбирай комнату и подключайся — код не нужен.</div><button className="primary-button" disabled={joining}>{joining ? 'Подключаем…' : 'Войти в комнату →'}</button></div></form> : <section className="live-panel"><div className="panel-heading"><div><span className="eyebrow">ТЫ В КОМНАТЕ</span><h2>{selectedRoom.label}</h2></div><span className="live-badge"><i /> В ЭФИРЕ</span></div><div className="participant-heading">УЧАСТНИКИ · {participants.length}</div><div className="participant-list">{participants.map(p => <div className="participant" key={p.id}><div className="participant-avatar">{p.name[0]?.toUpperCase()}</div><div className="participant-name"><b>{p.name}{p.local ? ' (ты)' : ''}</b><small>{p.speaking ? 'Говорит' : 'На связи'}</small></div><span className="mic-state">{p.muted ? 'Микрофон выкл.' : 'Микрофон вкл.'}</span></div>)}</div><div className="voice-controls"><button className="control-button" onClick={toggleMic}>{micEnabled ? 'Выключить микрофон' : 'Включить микрофон'}</button><button className="leave-button" onClick={leaveVoiceRoom}>Выйти из комнаты</button></div></section>}
+          <div className="status-line">{voiceStatus}</div><div className="alpha-note">Голосовые комнаты доступны пользователям с аккаунтом KENTY.</div><div className="audio-bin" ref={audioRef} />
         </div>}
       </section>
     </main>
