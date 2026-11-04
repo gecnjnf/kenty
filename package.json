@@ -13,12 +13,12 @@
     "start:server": "npm run start --workspace server",
     "desktop:dev": "npm run build --workspace web && electron .",
     "desktop:dist": "npm run build --workspace web && npm run icon:generate && electron-builder --win nsis",
-    "android:sync": "npm run build --workspace web && cap sync android --project-dir web",
-    "android:open": "cap open android --project-dir web",
-    "ios:sync": "npm run build --workspace web && cap sync ios --project-dir web",
-    "ios:open": "cap open ios --project-dir web",
-    "native:android:add": "cap add android --project-dir web",
-    "native:ios:add": "cap add ios --project-dir web",
+    "android:sync": "npm run build --workspace web && cd web && npx cap sync android",
+    "android:open": "cd web && npx cap open android",
+    "ios:sync": "npm run build --workspace web && cd web && npx cap sync ios",
+    "ios:open": "cd web && npx cap open ios",
+    "native:android:add": "cd web && npx cap add android",
+    "native:ios:add": "cd web && npx cap add ios",
     "icon:generate": "node scripts/generate-icon.cjs"
   },
   "devDependencies": {
