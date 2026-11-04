@@ -1,7 +1,14 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_ANON_KEY);
+const messageTimeFormatter = new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit' });
+
+function formatMessageTime(value) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? '' : messageTimeFormatter.format(date);
+}
+
 const VOICE_ROOMS = [
   { id: 'lobby', label: 'Общая', description: 'Для разговоров обо всём', icon: '◉' },
   { id: 'gaming', label: 'Игровая', description: 'Собираемся поиграть', icon: '🎮' },
@@ -32,6 +39,9 @@ export default function App() {
   const [conversations, setConversations] = useState([]);
   const [selectedConversation, setSelectedConversation] = useState(null);
   const [messages, setMessages] = useState([]);
+  const messagesEndRef = useRef(null);
+  const activeConversationIdRef = useRef(null);
+  const messageLoadRequestRef = useRef(0);
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -310,26 +320,96 @@ export default function App() {
       }
       setSelectedConversation({ id: conversationId, person });
       setTab('chat');
-      await loadMessages(conversationId);
     } catch (e) { setError(e.message || 'Не удалось открыть переписку.'); }
     finally { setBusy(false); }
   }
 
+  useEffect(() => {
+    const conversationId = selectedConversation?.id;
+    activeConversationIdRef.current = conversationId || null;
+    messageLoadRequestRef.current += 1;
+    setMessages([]);
+    if (!conversationId) return undefined;
+
+    let active = true;
+    const channel = supabase.channel('kenty:chat:' + conversationId)
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'messages',
+        filter: 'conversation_id=eq.' + conversationId
+      }, ({ new: incoming }) => {
+        if (!active || activeConversationIdRef.current !== conversationId || !incoming?.id) return;
+        setMessages(current => {
+          const merged = new Map(current.map(item => [item.id, item]));
+          merged.set(incoming.id, incoming);
+          return [...merged.values()]
+            .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+            .slice(-100);
+        });
+      })
+      .subscribe(status => {
+        if (active && status === 'SUBSCRIBED') loadMessages(conversationId);
+        if (active && status === 'CHANNEL_ERROR') {
+          setError('Не удалось включить обновление чата в реальном времени. Попробуй обновить страницу.');
+        }
+      });
+
+    return () => {
+      active = false;
+      if (activeConversationIdRef.current === conversationId) activeConversationIdRef.current = null;
+      supabase.removeChannel(channel);
+    };
+  }, [selectedConversation?.id]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'end' });
+  }, [messages, selectedConversation?.id]);
+
   async function loadMessages(id) {
-    const { data, error: err } = await supabase.from('messages').select('id,sender_id,content,created_at')
-      .eq('conversation_id', id).order('created_at', { ascending: true }).limit(100);
-    if (err) setError(err.message); else setMessages(data || []);
+    const requestId = ++messageLoadRequestRef.current;
+    const { data, error: err } = await supabase.from('messages')
+      .select('id,sender_id,content,created_at')
+      .eq('conversation_id', id)
+      .order('created_at', { ascending: false })
+      .limit(100);
+    if (requestId !== messageLoadRequestRef.current || activeConversationIdRef.current !== id) return;
+    if (err) {
+      setError('Не удалось загрузить сообщения: ' + err.message);
+      return;
+    }
+    const latestFirst = (data || []).reverse();
+    setMessages(current => {
+      const merged = new Map(latestFirst.map(item => [item.id, item]));
+      current.forEach(item => merged.set(item.id, item));
+      return [...merged.values()]
+        .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+        .slice(-100);
+    });
   }
 
   async function sendMessage(e) {
     e.preventDefault();
     const text = message.trim();
-    if (!text || !selectedConversation) return;
-    const { error: err } = await supabase.from('messages').insert({
-      conversation_id: selectedConversation.id, sender_id: session.user.id, content: text
-    });
-    if (err) setError(err.message);
-    else { setMessage(''); loadMessages(selectedConversation.id); }
+    if (!text || !selectedConversation || text.length > 10000) return;
+    const conversationId = selectedConversation.id;
+    const { data: sent, error: err } = await supabase.from('messages').insert({
+      conversation_id: conversationId, sender_id: session.user.id, content: text
+    }).select('id,sender_id,content,created_at').single();
+    if (err) {
+      setError('Не удалось отправить сообщение: ' + err.message);
+    } else {
+      setMessage('');
+      if (sent && activeConversationIdRef.current === conversationId) {
+        setMessages(current => {
+          const merged = new Map(current.map(item => [item.id, item]));
+          merged.set(sent.id, sent);
+          return [...merged.values()]
+            .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+            .slice(-100);
+        });
+      }
+    }
   }
 
   function personForFriendship(f) { return f.person || { username: 'Пользователь', display_name: 'Пользователь' }; }
@@ -699,7 +779,7 @@ export default function App() {
         <button className={'nav-item ' + (tab === 'settings' ? 'selected' : '')} onClick={() => setTab('settings')}>⚙ Настройки</button>
         <div className="sidebar-label">ПЕРЕПИСКИ</div>
         <div className="conversation-list">
-          {conversations.map(c => <button className={'conversation-link ' + (selectedConversation?.id === c.id ? 'selected' : '')} key={c.id} onClick={() => { setSelectedConversation(c); setTab('chat'); loadMessages(c.id); }}>
+          {conversations.map(c => <button className={'conversation-link ' + (selectedConversation?.id === c.id ? 'selected' : '')} key={c.id} onClick={() => { setSelectedConversation(c); setTab('chat'); }}>
             <span className="mini-avatar">{c.person?.avatar_url ? <img src={c.person.avatar_url} alt="" /> : (c.person?.display_name || c.person?.username || '?')[0].toUpperCase()}</span>{c.person?.display_name || c.person?.username || 'Личный чат'}
           </button>)}
           {!conversations.length && <small className="sidebar-empty">Пока нет переписок</small>}
@@ -745,7 +825,7 @@ export default function App() {
         {tab === 'chat' && <div className="chat-content">
           {!selectedConversation ? <div className="empty-state chat-empty"><h2>Твои сообщения</h2><p>Добавь друга и нажми «Написать», чтобы начать личную переписку.</p></div> : <>
             <div className="chat-welcome"><div className="chat-welcome-icon">#</div><h1>{selectedConversation.person?.display_name || selectedConversation.person?.username}</h1><p>Личная переписка KENTY</p></div>
-            <div className="chat-messages">{messages.map(m => <article className={"chat-message " + (m.sender_id === session.user.id ? "message-own" : "message-other")} key={m.id}><div className="message-avatar">{m.sender_id === session.user.id ? (profile?.avatar_url ? <img src={profile.avatar_url} alt="" /> : (profile?.username || 'Я')[0].toUpperCase()) : (selectedConversation.person?.avatar_url ? <img src={selectedConversation.person.avatar_url} alt="" /> : (selectedConversation.person?.username || 'Д')[0].toUpperCase())}</div><div><b>{m.sender_id === session.user.id ? 'Ты' : selectedConversation.person?.display_name || selectedConversation.person?.username}</b><p>{m.content}</p></div></article>)}</div>
+            <div className="chat-messages">{messages.map(m => <article className={"chat-message " + (m.sender_id === session.user.id ? "message-own" : "message-other")} key={m.id}><div className="message-avatar">{m.sender_id === session.user.id ? (profile?.avatar_url ? <img src={profile.avatar_url} alt="" /> : (profile?.username || 'Я')[0].toUpperCase()) : (selectedConversation.person?.avatar_url ? <img src={selectedConversation.person.avatar_url} alt="" /> : (selectedConversation.person?.username || 'Д')[0].toUpperCase())}</div><div><b>{m.sender_id === session.user.id ? 'Ты' : selectedConversation.person?.display_name || selectedConversation.person?.username}</b><p>{m.content}</p><time className="message-time" dateTime={m.created_at}>{formatMessageTime(m.created_at)}</time></div></article>)}{!messages.length && <p className="chat-no-messages">Пока тихо. Отправь первое сообщение 👋</p>}<div ref={messagesEndRef} /></div>
             <form className="chat-composer" onSubmit={sendMessage}><input value={message} onChange={e => setMessage(e.target.value)} placeholder="Написать сообщение…" /><button type="submit">Отправить</button></form>
           </>}
         </div>}
