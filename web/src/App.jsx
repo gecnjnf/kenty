@@ -40,6 +40,8 @@ export default function App() {
   const [connected, setConnected] = useState(false);
   const [micEnabled, setMicEnabled] = useState(true);
   const micEnabledRef = useRef(true);
+  const [noiseSuppression, setNoiseSuppression] = useState(() => localStorage.getItem('kenty-noise-suppression') !== 'false');
+  const noiseSuppressionRef = useRef(localStorage.getItem('kenty-noise-suppression') !== 'false');
   const [participants, setParticipants] = useState([]);
   const [voiceError, setVoiceError] = useState('');
   const [voiceStatus, setVoiceStatus] = useState('Голосовые комнаты готовы к подключению');
@@ -436,7 +438,7 @@ export default function App() {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: { ideal: true },
-          noiseSuppression: { ideal: true },
+          noiseSuppression: noiseSuppressionRef.current,
           autoGainControl: { ideal: true },
           channelCount: { ideal: 1 }
         },
@@ -549,6 +551,36 @@ export default function App() {
     setMicEnabled(false);
     setParticipants([]);
     setVoiceStatus('Ты вышел из комнаты');
+  }
+
+  async function toggleNoiseSuppression() {
+    const next = !noiseSuppressionRef.current;
+    noiseSuppressionRef.current = next;
+    setNoiseSuppression(next);
+    localStorage.setItem('kenty-noise-suppression', String(next));
+    const track = localStreamRef.current?.getAudioTracks()?.[0];
+    if (track && connected) {
+      try {
+        const supported = navigator.mediaDevices?.getSupportedConstraints?.() || {};
+        if (!('noiseSuppression' in supported)) {
+          setVoiceError('Этот браузер не поддерживает переключение шумоподавления во время звонка. Переподключись, чтобы применить настройку.');
+          return;
+        }
+        await track.applyConstraints({ noiseSuppression: next });
+        const actual = track.getSettings?.().noiseSuppression;
+        if (typeof actual === 'boolean' && actual !== next) {
+          setVoiceError('Браузер не применил настройку шумоподавления. Возможно, устройство не поддерживает её.');
+          return;
+        }
+        setVoiceError('');
+        setVoiceStatus(next ? 'Шумоподавление включено' : 'Шумоподавление выключено');
+      } catch (err) {
+        console.warn('KENTY noise suppression constraint:', err);
+        setVoiceError('Не удалось изменить шумоподавление. Попробуй переподключиться к комнате.');
+      }
+    } else {
+      setVoiceStatus(next ? 'Шумоподавление включено для следующего подключения' : 'Шумоподавление выключено для следующего подключения');
+    }
   }
 
   function toggleMic() {
@@ -709,7 +741,7 @@ export default function App() {
         {tab === 'voice' && <div className="voice-content">
           <div className="voice-heading"><div><div className="eyebrow">REAL-TIME VOICE</div><h1>Голосовые комнаты</h1><p>Заходи к друзьям, общайся и оставайся на связи.</p></div><div className="voice-orb">♫</div></div>
           {!connected && <><div className="room-owner-picker"><label htmlFor="voice-owner">КОМНАТА КОГО</label><select id="voice-owner" value={activeVoiceOwner?.id || ''} onChange={e => setSelectedVoiceOwnerId(e.target.value)}>{voiceOwners.map(owner => <option key={owner.id} value={owner.id}>{owner.label}</option>)}</select><small>Войти можно только в свою комнату или комнату принятого друга.</small></div><div className="room-picker">{VOICE_ROOMS.map(r => <button type="button" key={r.id} className={'room-card ' + (selectedRoom.id === r.id ? 'active' : '')} onClick={() => setSelectedRoom(r)}><span className="room-card-icon">{r.icon}</span><span className="room-card-title">{r.label}</span><span className="room-card-description">{r.description}</span></button>)}</div></>}
-          {!connected ? <form className="join-panel" onSubmit={joinVoiceRoom}><div className="panel-heading"><div><span className="eyebrow">ПОДКЛЮЧЕНИЕ</span><h2>Войти в «{selectedRoom.label}»</h2></div></div><div className="form-grid"><label><span>ТВОЁ ИМЯ</span><input value={voiceName} onChange={e => setVoiceName(e.target.value)} placeholder="Твоё имя" /></label></div>{voiceError && <div className="error-box">{voiceError}</div>}<div className="join-bottom"><div className="join-hint">Выбирай комнату и подключайся — код не нужен.</div><button className="primary-button" disabled={joining}>{joining ? 'Подключаем…' : 'Войти в комнату →'}</button></div></form> : <section className="live-panel"><div className="panel-heading"><div><span className="eyebrow">ТЫ В КОМНАТЕ</span><h2>{selectedRoom.label}</h2></div><span className="live-badge"><i /> В ЭФИРЕ</span></div><div className="participant-heading">УЧАСТНИКИ · {participants.length}</div><div className="participant-list">{participants.map(p => <div className="participant" key={p.id}><div className="participant-avatar">{p.name[0]?.toUpperCase()}</div><div className="participant-name"><b>{p.name}{p.local ? ' (ты)' : ''}</b><small>{p.speaking ? 'Говорит' : 'На связи'}</small></div><span className="mic-state">{p.muted ? 'Микрофон выкл.' : 'Микрофон вкл.'}</span></div>)}</div><div className="voice-controls"><button type="button" className={"control-button " + (!micEnabled ? "control-muted" : "")} aria-pressed={micEnabled} onClick={toggleMic}>{micEnabled ? '🎙 Выключить микрофон' : '🔇 Включить микрофон'}</button><button className="leave-button" onClick={leaveVoiceRoom}>Выйти из комнаты</button></div></section>}
+          {!connected ? <form className="join-panel" onSubmit={joinVoiceRoom}><div className="panel-heading"><div><span className="eyebrow">ПОДКЛЮЧЕНИЕ</span><h2>Войти в «{selectedRoom.label}»</h2></div></div><div className="form-grid"><label><span>ТВОЁ ИМЯ</span><input value={voiceName} onChange={e => setVoiceName(e.target.value)} placeholder="Твоё имя" /></label></div><button type="button" className={"noise-toggle " + (noiseSuppression ? "active" : "")} aria-pressed={noiseSuppression} onClick={toggleNoiseSuppression}><span className="noise-toggle-icon">✦</span><span><b>Шумоподавление</b><small>{noiseSuppression ? 'Включено · подавляет фоновые шумы' : 'Выключено · исходный звук микрофона'}</small></span><span className="noise-toggle-state">{noiseSuppression ? 'ВКЛ' : 'ВЫКЛ'}</span></button>{voiceError && <div className="error-box">{voiceError}</div>}<div className="join-bottom"><div className="join-hint">Выбирай комнату и подключайся — код не нужен.</div><button className="primary-button" disabled={joining}>{joining ? 'Подключаем…' : 'Войти в комнату →'}</button></div></form> : <section className="live-panel"><div className="panel-heading"><div><span className="eyebrow">ТЫ В КОМНАТЕ</span><h2>{selectedRoom.label}</h2></div><span className="live-badge"><i /> В ЭФИРЕ</span></div><div className="participant-heading">УЧАСТНИКИ · {participants.length}</div><div className="participant-list">{participants.map(p => <div className="participant" key={p.id}><div className="participant-avatar">{p.name[0]?.toUpperCase()}</div><div className="participant-name"><b>{p.name}{p.local ? ' (ты)' : ''}</b><small>{p.speaking ? 'Говорит' : 'На связи'}</small></div><span className="mic-state">{p.muted ? 'Микрофон выкл.' : 'Микрофон вкл.'}</span></div>)}</div><div className="voice-controls"><button type="button" className={"control-button " + (!micEnabled ? "control-muted" : "")} aria-pressed={micEnabled} onClick={toggleMic}>{micEnabled ? '🎙 Выключить микрофон' : '🔇 Включить микрофон'}</button><button type="button" className={"control-button noise-live-button " + (noiseSuppression ? "noise-live-active" : "")} aria-pressed={noiseSuppression} onClick={toggleNoiseSuppression}>✦ Шумоподавление: {noiseSuppression ? 'ВКЛ' : 'ВЫКЛ'}</button><button className="leave-button" onClick={leaveVoiceRoom}>Выйти из комнаты</button></div></section>}
           <div className="status-line">{voiceStatus}</div><div className="alpha-note">Голос идёт напрямую между участниками через WebRTC. Комнаты доступны владельцу и принятым друзьям.</div><div className="audio-bin" ref={audioRef} />
         </div>}
       </section>
