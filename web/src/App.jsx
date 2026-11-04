@@ -418,7 +418,7 @@ export default function App() {
     <main className="auth-screen">
       <form className="auth-card" onSubmit={submitAuth}>
         <div className="brand-name auth-logo">KENTY</div>
-        {!isInstalled && <button type="button" className="install-button auth-install" onClick={installApp}>Установить приложение ↗</button>}
+        {!isInstalled && <button type="button" className="install-button auth-install" onClick={installApp}>⬇ Скачать приложение</button>}
         <div className="eyebrow">YOUR SPACE. YOUR PEOPLE.</div>
         <h1>{authMode === 'login' ? 'С возвращением' : 'Создай аккаунт'}</h1>
         <p className="auth-subtitle">Общайся с друзьями, переписывайся и заходи в голосовые комнаты. Для KENTY нужна только пара ник + пароль.</p>
@@ -438,6 +438,32 @@ export default function App() {
         </button>
         <p className="auth-subtitle">Важно: ник и пароль нужно запомнить. Восстановление пароля без почты или телефона пока недоступно.</p>
       </form>
+      {!isInstalled && (
+        <section className="download-card" aria-label="Установка приложения KENTY">
+          <div className="download-card-icon">K</div>
+          <div className="download-card-copy">
+            <span className="eyebrow">KENTY ДЛЯ ТВОИХ УСТРОЙСТВ</span>
+            <h2>Установи KENTY как приложение</h2>
+            <p>Открой KENTY с рабочего стола или главного экрана — без необходимости каждый раз искать сайт.</p>
+          </div>
+          <button type="button" className="download-main-button" onClick={installApp}>⬇ Установить KENTY</button>
+          <div className="download-platforms">
+            <details>
+              <summary>Windows / Mac / Linux</summary>
+              <p>Открой сайт в Chrome, Edge или Яндекс Браузере. Нажми «Установить KENTY» в адресной строке или открой меню браузера и выбери установку приложения.</p>
+            </details>
+            <details>
+              <summary>Android</summary>
+              <p>Открой сайт в Chrome, нажми меню ⋮ и выбери «Установить приложение» или «Добавить на главный экран».</p>
+            </details>
+            <details>
+              <summary>iPhone / iPad</summary>
+              <p>Открой сайт в Safari, нажми «Поделиться», затем «На экран Домой» и подтверди добавление.</p>
+            </details>
+          </div>
+          <p className="download-note">Бесплатно · Установка через браузер · Интернет нужен для общения</p>
+        </section>
+      )}
     </main>
   );
 
