@@ -1,0 +1,29 @@
+name: KENTY iOS Xcode project
+on:
+  workflow_dispatch:
+  pull_request:
+    paths: ['web/**','package.json','.github/workflows/ios-project.yml']
+permissions:
+  contents: read
+jobs:
+  ios:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: 22,cache: npm}
+      - run: npm install
+      - run: npm run build
+      - name: Generate iOS project
+        run: |
+          npx cap add ios --project-dir web
+          npx cap sync ios --project-dir web
+          npx @capacitor/assets generate --assetPath web/assets --ios
+          node scripts/patch-native-permissions.cjs ios
+      - name: Build iOS simulator app
+        run: xcodebuild -project web/ios/App/App.xcodeproj -scheme App -sdk iphonesimulator -configuration Debug CODE_SIGNING_ALLOWED=NO build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: KENTY-iOS-Xcode-${{ github.sha }}
+          path: web/ios/
+          if-no-files-found: error
