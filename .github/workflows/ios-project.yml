@@ -15,11 +15,12 @@ jobs:
       - run: npm install
       - run: npm run build
       - name: Generate iOS project
+        working-directory: web
         run: |
-          npx cap add ios --project-dir web
-          npx cap sync ios --project-dir web
-          npx @capacitor/assets generate --assetPath web/assets --iosProject web/ios/App --ios
-          node scripts/patch-native-permissions.cjs ios
+          npx cap add ios
+          npx cap sync ios
+          npx @capacitor/assets generate --iosProject ios/App --ios
+          node ../scripts/patch-native-permissions.cjs ios
       - name: Build iOS simulator app
         run: xcodebuild -project web/ios/App/App.xcodeproj -scheme App -sdk iphonesimulator -configuration Debug CODE_SIGNING_ALLOWED=NO build
       - uses: actions/upload-artifact@v4
