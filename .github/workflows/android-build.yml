@@ -23,11 +23,12 @@ jobs:
       - run: npm install
       - run: npm run build
       - name: Generate Android project
+        working-directory: web
         run: |
-          npx cap add android --project-dir web
-          npx cap sync android --project-dir web
-          npx @capacitor/assets generate --assetPath web/assets --androidProject web/android --android
-          node scripts/patch-native-permissions.cjs android
+          npx cap add android
+          npx cap sync android
+          npx @capacitor/assets generate --androidProject android --android
+          node ../scripts/patch-native-permissions.cjs android
       - name: Build APK and AAB
         working-directory: web/android
         run: |
