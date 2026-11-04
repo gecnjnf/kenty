@@ -333,9 +333,31 @@ export default function App() {
     await channel.send({ type: 'broadcast', event: 'signal', payload: { from: session.user.id, to, ...signal } });
   }
 
+  function closePeerConnection(remoteId) {
+    const pc = peerConnectionsRef.current.get(remoteId);
+    if (pc) {
+      pc.onicecandidate = null;
+      pc.ontrack = null;
+      pc.onconnectionstatechange = null;
+      pc.close();
+      peerConnectionsRef.current.delete(remoteId);
+    }
+    const audio = audioElementsRef.current.get(remoteId);
+    if (audio) {
+      audio.pause();
+      audio.srcObject = null;
+      audio.remove();
+      audioElementsRef.current.delete(remoteId);
+    }
+    offeredToRef.current.delete(remoteId);
+    pendingCandidatesRef.current.delete(remoteId);
+    participantNamesRef.current.delete(remoteId);
+  }
+
   function createPeerConnection(remoteId, remoteName = 'Участник') {
     const existing = peerConnectionsRef.current.get(remoteId);
-    if (existing) return existing;
+    if (existing && existing.connectionState !== 'closed') return existing;
+    if (existing) closePeerConnection(remoteId);
     const pc = new RTCPeerConnection({
       iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
@@ -411,8 +433,25 @@ export default function App() {
       if (!accessToken) throw new Error('Сессия закончилась. Выйди из KENTY и войди снова.');
       await supabase.realtime.setAuth(accessToken);
 
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }, video: false });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: { ideal: true },
+          noiseSuppression: { ideal: true },
+          autoGainControl: { ideal: true },
+          channelCount: { ideal: 1 }
+        },
+        video: false
+      });
       localStreamRef.current = stream;
+      stream.getAudioTracks().forEach(track => {
+        track.onended = () => {
+          if (localStreamRef.current === stream) {
+            micEnabledRef.current = false;
+            setMicEnabled(false);
+            setVoiceError('Микрофон отключился. Проверь устройство и подключись снова.');
+          }
+        };
+      });
       const topic = `voice:${activeVoiceOwner?.id || session.user.id}:${selectedRoom.id}`;
       const channel = supabase.channel(topic, {
         config: { private: true, broadcast: { self: false, ack: true }, presence: { key: session.user.id } }
@@ -422,6 +461,10 @@ export default function App() {
       channel.on('presence', { event: 'sync' }, async () => {
         const state = channel.presenceState();
         const peers = Object.values(state).flat().filter(p => p.userId && p.userId !== session.user.id);
+        const activePeerIds = new Set(peers.map(peer => peer.userId));
+        for (const peerId of [...peerConnectionsRef.current.keys()]) {
+          if (!activePeerIds.has(peerId)) closePeerConnection(peerId);
+        }
         for (const peer of peers) {
           participantNamesRef.current.set(peer.userId, peer.name || 'Участник');
           const pc = createPeerConnection(peer.userId, peer.name || 'Участник');
@@ -471,7 +514,7 @@ export default function App() {
       const channel = voiceChannelRef.current;
       voiceChannelRef.current = null;
       if (channel) await supabase.removeChannel(channel).catch(() => {});
-      peerConnectionsRef.current.forEach(pc => pc.close());
+      [...peerConnectionsRef.current.keys()].forEach(closePeerConnection);
       peerConnectionsRef.current.clear();
       offeredToRef.current.clear();
       pendingCandidatesRef.current.clear();
@@ -491,7 +534,7 @@ export default function App() {
     const channel = voiceChannelRef.current;
     voiceChannelRef.current = null;
     if (channel) await supabase.removeChannel(channel).catch(() => {});
-    peerConnectionsRef.current.forEach(pc => pc.close());
+    [...peerConnectionsRef.current.keys()].forEach(closePeerConnection);
     peerConnectionsRef.current.clear();
     offeredToRef.current.clear();
     pendingCandidatesRef.current.clear();
