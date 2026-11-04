@@ -1,4 +1,6 @@
-const fs=require('node:fs');\nconst path=require('node:path');\nconst root=path.resolve(__dirname,'..');
+const fs=require('node:fs');
+const path=require('node:path');
+const root=path.resolve(__dirname,'..');
 const platform=process.argv[2];
 function insertPlist(key,value){
  const file=path.join(root,'web/ios/App/App/Info.plist');let xml=fs.readFileSync(file,'utf8');
