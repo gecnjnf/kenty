@@ -18,6 +18,9 @@ const VOICE_ROOMS = [
 export default function App() {
   const [session, setSession] = useState(null);
   const [profile, setProfile] = useState(null);
+  const [displayName, setDisplayName] = useState('');
+  const [bio, setBio] = useState('');
+  const [profileBusy, setProfileBusy] = useState(false);
   const [authMode, setAuthMode] = useState('login');
   const [password, setPassword] = useState('');
   const [username, setUsername] = useState('');
@@ -28,6 +31,7 @@ export default function App() {
   const [error, setError] = useState('');
   const [tab, setTab] = useState('friends');
   const [theme, setTheme] = useState(() => localStorage.getItem('kenty-theme') || 'dark');
+  const [accentTheme, setAccentTheme] = useState(() => localStorage.getItem('kenty-accent') || 'violet');
   const [avatarBusy, setAvatarBusy] = useState(false);
   const [search, setSearch] = useState('');
   const [searchResults, setSearchResults] = useState([]);
@@ -116,6 +120,11 @@ export default function App() {
   }, [theme]);
 
   useEffect(() => {
+    document.documentElement.dataset.accent = accentTheme;
+    localStorage.setItem('kenty-accent', accentTheme);
+  }, [accentTheme]);
+
+  useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session));
     const { data: listener } = supabase.auth.onAuthStateChange((_event, next) => setSession(next));
     return () => listener.subscription.unsubscribe();
@@ -181,7 +190,44 @@ export default function App() {
   async function loadProfile() {
     const { data, error: err } = await supabase.from('profiles').select('*').eq('id', session.user.id).single();
     if (err) setError(err.message);
-    else { setProfile(data); setVoiceName(data.display_name || data.username); }
+    else {
+      setProfile(data);
+      setDisplayName(data.display_name || data.username || '');
+      setBio(data.bio || '');
+      setVoiceName(data.display_name || data.username);
+    }
+  }
+
+  async function saveProfile(e) {
+    e.preventDefault();
+    const cleanName = displayName.trim();
+    const cleanBio = bio.trim();
+    if (cleanName.length < 2 || cleanName.length > 32) {
+      setError('Имя должно содержать от 2 до 32 символов.');
+      return;
+    }
+    if (cleanBio.length > 160) {
+      setError('Описание профиля должно быть не длиннее 160 символов.');
+      return;
+    }
+    setProfileBusy(true);
+    setError('');
+    try {
+      const { data, error: updateError } = await supabase.from('profiles')
+        .update({ display_name: cleanName, bio: cleanBio, updated_at: new Date().toISOString() })
+        .eq('id', session.user.id)
+        .select('id,username,display_name,avatar_url,bio')
+        .single();
+      if (updateError) throw updateError;
+      setProfile(prev => ({ ...prev, ...data }));
+      setVoiceName(cleanName);
+      setNotice('Профиль сохранён!');
+      await loadSocial();
+    } catch (saveError) {
+      setError('Не удалось сохранить профиль: ' + (saveError.message || 'ошибка'));
+    } finally {
+      setProfileBusy(false);
+    }
   }
 
   async function uploadAvatar(event) {
@@ -835,8 +881,24 @@ export default function App() {
           <section className="settings-card"><div className="settings-card-heading"><div><h2>Фото профиля</h2><p>Это фото увидят твои друзья и собеседники.</p></div></div>
             <div className="avatar-editor"><div className="avatar-preview">{profile?.avatar_url ? <img src={profile.avatar_url} alt="Твой аватар" /> : <span>{(profile?.display_name || profile?.username || 'K')[0].toUpperCase()}</span>}</div><div className="avatar-editor-copy"><b>{profile?.display_name || profile?.username || 'Твой профиль'}</b><small>@{profile?.username || 'user'}</small><label className="primary-button avatar-upload-button">{avatarBusy ? 'Загружаем…' : 'Выбрать фото'}<input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={uploadAvatar} disabled={avatarBusy} /></label><small>JPG, PNG, WEBP или GIF · до 5 МБ</small></div></div>
           </section>
+          <form className="settings-card profile-edit-card" onSubmit={saveProfile}>
+            <div className="settings-card-heading"><div><h2>Личная информация</h2><p>Имя и описание, которые увидят друзья.</p></div></div>
+            <div className="profile-edit-grid">
+              <label>Отображаемое имя<input value={displayName} onChange={e => setDisplayName(e.target.value)} maxLength={32} placeholder="Как тебя называть?" /></label>
+              <label>О себе<textarea value={bio} onChange={e => setBio(e.target.value)} maxLength={160} rows={3} placeholder="Пара слов о себе…" /></label>
+            </div>
+            <div className="profile-edit-footer"><small>{bio.length}/160 символов</small><button className="primary-button" disabled={profileBusy}>{profileBusy ? 'Сохраняем…' : 'Сохранить профиль'}</button></div>
+          </form>
           <section className="settings-card"><div className="settings-card-heading"><div><h2>Внешний вид</h2><p>Выбери оформление приложения. Настройка сохранится на этом устройстве.</p></div></div>
             <div className="theme-options"><button type="button" className={'theme-option ' + (theme === 'dark' ? 'active' : '')} onClick={() => setTheme('dark')}><span className="theme-preview dark-preview"><i /><i /><i /></span><b>Тёмная</b><small>Комфортно вечером</small></button><button type="button" className={'theme-option ' + (theme === 'light' ? 'active' : '')} onClick={() => setTheme('light')}><span className="theme-preview light-preview"><i /><i /><i /></span><b>Светлая</b><small>Больше света и контраста</small></button></div>
+          </section>
+          <section className="settings-card accent-settings-card">
+            <div className="settings-card-heading"><div><h2>Цвет акцента</h2><p>Выбери оттенок кнопок и активных элементов.</p></div></div>
+            <div className="accent-options">
+              <button type="button" className={'accent-option accent-violet ' + (accentTheme === 'violet' ? 'active' : '')} onClick={() => setAccentTheme('violet')}><i />Фиолетовый</button>
+              <button type="button" className={'accent-option accent-ocean ' + (accentTheme === 'ocean' ? 'active' : '')} onClick={() => setAccentTheme('ocean')}><i />Океан</button>
+              <button type="button" className={'accent-option accent-sunset ' + (accentTheme === 'sunset' ? 'active' : '')} onClick={() => setAccentTheme('sunset')}><i />Закат</button>
+            </div>
           </section>
         </div>}
 
