@@ -1381,3 +1381,80 @@ body, .app-shell { background: #09090d; }
 :root[data-theme="light"] .social-section, :root[data-theme="light"] .auth-card { background: #fffaf8; border-color: #f0d5ce; }
 :root[data-theme="light"] .room-card { background: #fff8f5; border-color: #efd5ce; }
 :root[data-theme="light"] .room-card.active { background: linear-gradient(145deg, #ffe9e1, #fff8f5); border-color: #f16a50; }
+
+
+/* KENTY atmospheric interface backdrop: ember glow, technical grid and speed lines */
+.main-panel {
+  position: relative;
+  isolation: isolate;
+  background:
+    radial-gradient(ellipse at 78% 18%, rgba(255, 65, 42, .095), transparent 34%),
+    radial-gradient(ellipse at 18% 82%, rgba(255, 126, 35, .055), transparent 38%),
+    linear-gradient(145deg, #0d0b10 0%, #100c11 52%, #0b0b10 100%);
+}
+.main-panel::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  pointer-events: none;
+  opacity: .7;
+  background-image:
+    linear-gradient(rgba(255, 115, 78, .035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 115, 78, .035) 1px, transparent 1px),
+    repeating-linear-gradient(132deg, transparent 0 94px, rgba(255, 83, 54, .035) 95px, transparent 97px 190px),
+    radial-gradient(circle at 82% 28%, rgba(255, 71, 42, .13) 0, transparent 2px);
+  background-size: 42px 42px, 42px 42px, 100% 100%, 100% 100%;
+  mask-image: linear-gradient(90deg, transparent, #000 16%, #000 90%, transparent);
+}
+.main-panel::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  width: min(42vw, 520px);
+  aspect-ratio: 1;
+  right: -15%;
+  top: 12%;
+  pointer-events: none;
+  border: 1px solid rgba(255, 91, 58, .08);
+  border-radius: 50%;
+  box-shadow:
+    0 0 0 28px rgba(255, 91, 58, .018),
+    0 0 0 58px rgba(255, 91, 58, .014),
+    0 0 90px rgba(255, 66, 40, .07);
+  opacity: .8;
+}
+.topbar, .voice-content, .social-content, .chat-content {
+  background-color: transparent;
+}
+@media (max-width: 640px) {
+  .main-panel::before {
+    opacity: .48;
+    background-size: 34px 34px, 34px 34px, 100% 100%, 100% 100%;
+  }
+  .main-panel::after {
+    width: 78vw;
+    right: -36%;
+    top: 18%;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .main-panel::before { animation: kenty-ember-drift 24s ease-in-out infinite alternate; }
+  @keyframes kenty-ember-drift {
+    from { transform: translate3d(0, 0, 0); }
+    to { transform: translate3d(-10px, 7px, 0); }
+  }
+}
+:root[data-theme="light"] .main-panel {
+  background:
+    radial-gradient(ellipse at 78% 18%, rgba(255, 91, 60, .10), transparent 36%),
+    radial-gradient(ellipse at 18% 82%, rgba(255, 157, 72, .07), transparent 40%),
+    linear-gradient(145deg, #fffaf8, #fff5f0 55%, #fffaf8);
+}
+:root[data-theme="light"] .main-panel::before {
+  background-image:
+    linear-gradient(rgba(184, 70, 48, .045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(184, 70, 48, .045) 1px, transparent 1px),
+    repeating-linear-gradient(132deg, transparent 0 94px, rgba(220, 84, 56, .035) 95px, transparent 97px 190px);
+}
+:root[data-theme="light"] .main-panel::after { border-color: rgba(220, 84, 56, .10); }
