@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { Suspense, lazy, useEffect, useRef, useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
-import Communities from './Communities.jsx';
+
+const Communities = lazy(() => import('./Communities.jsx'));
 
 const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_ANON_KEY);
 const messageTimeFormatter = new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit' });
@@ -1284,7 +1285,7 @@ export default function App() {
         {error && <div className="global-error">{error}<button onClick={() => setError('')}>×</button></div>}
         {notice && <div className="global-notice">{notice}<button onClick={() => setNotice('')}>×</button></div>}
 
-        {tab === 'servers' && <Communities session={session} onNotice={setNotice} onError={setError} />}
+        {tab === 'servers' && <Suspense fallback={<div className="community-loading">Загружаем сообщества…</div>}><Communities session={session} onNotice={setNotice} onError={setError} /></Suspense>}
 
         {tab === 'friends' && <div className="social-content">
           <section className="friends-hero">
