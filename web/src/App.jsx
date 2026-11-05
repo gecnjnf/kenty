@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
+import Communities from './Communities.jsx';
 
 const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_ANON_KEY);
 const messageTimeFormatter = new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit' });
@@ -1106,12 +1107,13 @@ export default function App() {
 
   return (
     <main className="app-shell">
-      <aside className="server-rail"><div className="brand-mark">K</div><div className="rail-divider" /><div className="server-icon selected">K</div></aside>
+      <aside className="server-rail"><div className="brand-mark">K</div><div className="rail-divider" /><button type="button" className="server-icon selected" onClick={() => setTab('servers')} title="Сообщества" aria-label="Сообщества">✦</button></aside>
       <aside className="sidebar">
         <div className="brand-row"><div className="brand-name">KENTY</div><span className="beta-tag">ALPHA</span></div>
         <div className="sidebar-label">ПРОСТРАНСТВО</div>
         <button className={'nav-item ' + (tab === 'friends' ? 'selected' : '')} onClick={() => setTab('friends')}>♧ Друзья</button>
         <button className={'nav-item ' + (tab === 'chat' ? 'selected' : '')} onClick={() => setTab('chat')}># Сообщения</button>
+        <button className={'nav-item ' + (tab === 'servers' ? 'selected' : '')} onClick={() => setTab('servers')}>✦ Сообщества</button>
         <button className={'nav-item ' + (tab === 'voice' ? 'selected' : '')} onClick={() => setTab('voice')}>◖ Голосовые комнаты</button>
         <button className={'nav-item ' + (tab === 'settings' ? 'selected' : '')} onClick={() => setTab('settings')}>⚙ Настройки</button>
         <div className="sidebar-label">ПЕРЕПИСКИ</div>
@@ -1129,12 +1131,14 @@ export default function App() {
       </aside>
       <section className="main-panel">
         <header className="topbar">
-          <div className="topbar-title"><span className="hash">{tab === 'chat' ? '#' : '◖'}</span><b>{tab === 'friends' ? 'друзья' : tab === 'chat' ? (selectedConversation?.person?.display_name || selectedConversation?.person?.username || 'сообщения') : tab === 'settings' ? 'настройки' : 'голосовые-комнаты'}</b></div>
+          <div className="topbar-title"><span className="hash">{tab === 'chat' ? '#' : tab === 'servers' ? '✦' : '◖'}</span><b>{tab === 'friends' ? 'друзья' : tab === 'chat' ? (selectedConversation?.person?.display_name || selectedConversation?.person?.username || 'сообщения') : tab === 'servers' ? 'сообщества' : tab === 'settings' ? 'настройки' : 'голосовые-комнаты'}</b></div>
           <div className="topbar-right">{!isInstalled && <button type="button" className="install-button" onClick={installApp}>Установить</button>}<span className={'connection-pill ' + (connected ? 'connected' : '')}><i />{connected ? 'В голосовой комнате' : 'KENTY · пространство для своих'}</span></div>
         </header>
 
         {error && <div className="global-error">{error}<button onClick={() => setError('')}>×</button></div>}
         {notice && <div className="global-notice">{notice}<button onClick={() => setNotice('')}>×</button></div>}
+
+        {tab === 'servers' && <Communities session={session} onNotice={setNotice} onError={setError} />}
 
         {tab === 'friends' && <div className="social-content">
           <section className="friends-hero">
@@ -1229,6 +1233,7 @@ export default function App() {
       {expandedImage && <div className="image-lightbox" role="dialog" aria-modal="true" aria-label="Просмотр фотографии" onClick={() => setExpandedImage('')}><button type="button" aria-label="Закрыть фотографию" onClick={() => setExpandedImage('')}>×</button><img src={expandedImage} alt="Фотография из переписки" onClick={e => e.stopPropagation()} /></div>}
       <nav className="mobile-dock" aria-label="Основная навигация">
         <button type="button" className={tab === 'friends' ? 'active' : ''} onClick={() => setTab('friends')}><span>♧</span><small>Друзья</small></button>
+        <button type="button" className={tab === 'servers' ? 'active' : ''} onClick={() => setTab('servers')}><span>✦</span><small>Серверы</small></button>
         <button type="button" className={tab === 'chat' ? 'active' : ''} onClick={() => setTab('chat')}><span>▤</span><small>Чаты</small></button>
         <button type="button" className={tab === 'voice' ? 'active' : ''} onClick={() => setTab('voice')}><span>◖</span><small>Голос</small></button>
         <button type="button" className={tab === 'settings' ? 'active' : ''} onClick={() => setTab('settings')}><span>⚙</span><small>Настройки</small></button>
