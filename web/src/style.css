@@ -1581,3 +1581,88 @@ body, .app-shell { background: #09090d; }
   .message-actions { opacity:1; }
   .message-actions button { min-height:28px; padding:5px 3px; }
 }
+
+
+/* KENTY 2.0 — server and channel workspace */
+.server-rail .server-icon {
+  border:1px solid rgba(255,255,255,.08);
+  background:linear-gradient(145deg,#29252a,#1a1b22);
+  color:#f4d6ce;
+  font-weight:800;
+  transition:transform .18s ease,border-color .18s ease,background .18s ease;
+}
+.server-rail .server-icon:hover { transform:translateY(-2px);border-color:rgba(255,129,93,.45); }
+.server-rail .server-icon.selected {
+  border-radius:13px;
+  border-color:rgba(255,129,93,.65);
+  background:linear-gradient(145deg,#ef674b,#9e392f);
+  color:#fff;
+  box-shadow:0 8px 22px rgba(224,75,54,.22);
+}
+.server-rail .server-add-button { color:#ff987d;background:rgba(255,105,73,.1);border:1px dashed rgba(255,129,93,.45); }
+.sidebar-create-form,.sidebar-join-form { display:flex;gap:6px;padding:4px 8px 8px; }
+.sidebar-create-form input,.sidebar-join-form input {
+  min-width:0;width:100%;height:34px;padding:0 9px;
+  border:1px solid rgba(255,255,255,.09);border-radius:8px;
+  outline:none;background:#15171e;color:#f4f2f2;font-size:10px;
+}
+.sidebar-create-form input:focus,.sidebar-join-form input:focus { border-color:#ed795e; }
+.sidebar-create-form button,.sidebar-join-form button {
+  flex:none;border:0;border-radius:8px;padding:0 10px;
+  color:#fff;background:linear-gradient(135deg,#ff7950,#e94c35);
+  font-size:10px;font-weight:800;
+}
+.server-channel-list { display:flex;flex-direction:column;gap:3px;padding:0 8px 7px; }
+.server-channel-list .conversation-link { width:100%;min-height:34px;font-size:11px; }
+.server-channel-list .conversation-link.selected { color:#fff;background:rgba(255,105,73,.13); }
+.channel-kind { width:19px;flex:none;color:#ff9478;font-weight:800;text-align:center; }
+.channel-sidebar-label { margin-top:12px; }
+.create-channel-toggle { font-size:10px!important; }
+.server-content {
+  width:min(100%,1180px);height:calc(100% - 62px);min-height:0;
+  margin:0 auto;padding:26px 34px 24px;
+  display:flex;flex-direction:column;gap:18px;overflow:hidden;
+}
+.server-welcome {
+  flex:none;display:flex;align-items:center;justify-content:space-between;gap:18px;
+  padding:25px 28px;border:1px solid rgba(255,129,93,.23);border-radius:18px;
+  background:radial-gradient(ellipse at 85% 0%,rgba(255,105,73,.19),transparent 42%),linear-gradient(115deg,#342126,#211e27 68%,#1c2029);
+  box-shadow:0 16px 40px rgba(0,0,0,.18);
+}
+.server-welcome h1 { margin:8px 0 6px;color:#fff;font-size:clamp(22px,3vw,30px);letter-spacing:-.7px; }
+.server-welcome p { margin:0;color:#b9aeb1;font-size:12px;line-height:1.6; }
+.server-welcome .primary-button { flex:none;min-height:42px;padding:0 15px; }
+.server-channel-heading {
+  flex:none;display:flex;align-items:center;gap:12px;padding:4px 2px 13px;
+  border-bottom:1px solid rgba(255,255,255,.08);
+}
+.server-channel-heading>span { color:#ff9478;font-size:24px;font-weight:800; }
+.server-channel-heading b { display:block;color:#f7f4f3;font-size:14px; }
+.server-channel-heading small { display:block;margin-top:4px;color:#888d9c;font-size:10px; }
+.server-channel-messages { flex:1;min-height:0;overflow:auto;padding:12px 4px;overscroll-behavior:contain; }
+.server-chat-message { display:flex;align-items:flex-start;gap:11px;margin:0 0 17px; }
+.server-chat-message>div:last-child { min-width:0;flex:1; }
+.server-chat-message b { color:#f3f1f0;font-size:11px; }
+.server-chat-message time { margin-left:9px;color:#777d8d;font-size:9px; }
+.server-chat-message p { margin:5px 0 0;color:#c7c5ca;font-size:12px;line-height:1.55;white-space:pre-wrap;overflow-wrap:anywhere; }
+.server-chat-composer { flex:none; }
+:root[data-theme="light"] .server-welcome { background:linear-gradient(115deg,#fff0e9,#fff8f4 68%,#f5f5f8);border-color:#f0c5b7; }
+:root[data-theme="light"] .server-welcome h1,:root[data-theme="light"] .server-channel-heading b,:root[data-theme="light"] .server-chat-message b { color:#28252a; }
+:root[data-theme="light"] .server-welcome p,:root[data-theme="light"] .server-channel-heading small,:root[data-theme="light"] .server-chat-message p { color:#67616a; }
+@media(max-width:640px) {
+  .mobile-dock { grid-template-columns:repeat(5,minmax(0,1fr)); }
+  .server-content {
+    width:100%;height:calc(100dvh - 58px - 66px - env(safe-area-inset-bottom));
+    padding:16px 12px 12px;gap:12px;overflow:hidden;
+  }
+  .server-welcome { align-items:flex-start;flex-direction:column;padding:18px 16px;gap:13px;border-radius:14px; }
+  .server-welcome h1 { font-size:22px; }
+  .server-welcome p { font-size:11px; }
+  .server-welcome .primary-button { width:100%;min-height:43px; }
+  .server-channel-heading { padding-bottom:10px; }
+  .server-channel-messages { padding:8px 2px; }
+  .server-chat-message { gap:8px;margin-bottom:14px; }
+  .server-chat-message p { font-size:13px; }
+  .server-chat-composer { margin-bottom:2px; }
+  .sidebar-create-form input,.sidebar-join-form input { min-height:36px;font-size:12px; }
+}
