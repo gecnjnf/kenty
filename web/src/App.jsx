@@ -77,6 +77,7 @@ export default function App() {
   const [micEnabled, setMicEnabled] = useState(true);
   const [cameraEnabled, setCameraEnabled] = useState(false);
   const [voiceCameraFacing, setVoiceCameraFacing] = useState('user');
+  const [voiceCameraSwitching, setVoiceCameraSwitching] = useState(false);
   const [remoteVideoStreams, setRemoteVideoStreams] = useState({});
   const localVideoStreamRef = useRef(null);
   const localVideoRef = useRef(null);
@@ -990,30 +991,91 @@ export default function App() {
   }
 
   async function switchVoiceCamera() {
-    if (!connected || !cameraEnabled) return;
+    if (!connected || !cameraEnabled || voiceCameraSwitching) return;
     const nextFacing = voiceCameraFacing === 'user' ? 'environment' : 'user';
     const previousStream = localVideoStreamRef.current;
+    const previousTrack = previousStream?.getVideoTracks()?.[0];
+    if (!previousTrack || !navigator.mediaDevices?.getUserMedia) {
+      setVoiceError('Камера недоступна. Попробуй выключить и снова включить её.');
+      return;
+    }
+
+    setVoiceCameraSwitching(true);
+    setVoiceError('');
     try {
-      if (!navigator.mediaDevices?.getUserMedia) throw new Error('Браузер не поддерживает переключение камеры.');
-      const nextStream = await navigator.mediaDevices.getUserMedia({
-        audio: false,
-        video: { facingMode: { exact: nextFacing }, width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 24, max: 30 } }
-      });
+      // Сначала просим текущую камеру сменить объектив: это надёжнее на Android,
+      // где одновременное открытие двух камер часто блокируется системой.
+      let switchedInPlace = false;
+      try {
+        await previousTrack.applyConstraints({ facingMode: { exact: nextFacing } });
+        const actualFacing = previousTrack.getSettings?.().facingMode;
+        switchedInPlace = !actualFacing || actualFacing === nextFacing;
+      } catch {
+        switchedInPlace = false;
+      }
+
+      if (switchedInPlace) {
+        setVoiceCameraFacing(nextFacing);
+        setVoiceStatus(nextFacing === 'user' ? 'Переключено на фронтальную камеру' : 'Переключено на основную камеру');
+        return;
+      }
+
+      // Резервный путь для браузеров без поддержки applyConstraints(facingMode).
+      previousTrack.stop();
+      let nextStream;
+      try {
+        nextStream = await navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: { facingMode: { exact: nextFacing }, width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 24, max: 30 } }
+        });
+      } catch (switchError) {
+        // Если выбранная камера недоступна, восстанавливаем прежнюю, чтобы звонок не остался без видео.
+        const restored = await navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: { facingMode: { ideal: voiceCameraFacing }, width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 24, max: 30 } }
+        }).catch(() => null);
+        if (restored) {
+          const restoredTrack = restored.getVideoTracks()[0];
+          localVideoStreamRef.current = restored;
+          await Promise.all([...peerConnectionsRef.current.values()].map(pc => {
+            const sender = pc.getTransceivers().find(t => t.receiver.track.kind === 'video')?.sender;
+            return sender ? sender.replaceTrack(restoredTrack) : Promise.resolve();
+          }));
+          if (localVideoRef.current) {
+            localVideoRef.current.srcObject = restored;
+            await localVideoRef.current.play().catch(() => {});
+          }
+        } else {
+          localVideoStreamRef.current = null;
+          setCameraEnabled(false);
+        }
+        throw switchError;
+      }
+
       const nextTrack = nextStream.getVideoTracks()[0];
-      if (!nextTrack) throw new Error('Не удалось запустить выбранную камеру.');
-      const senders = [...peerConnectionsRef.current.values()].map(pc => pc.getTransceivers().find(t => t.receiver.track.kind === 'video')?.sender).filter(Boolean);
-      await Promise.all(senders.map(sender => sender.replaceTrack(nextTrack)));
+      if (!nextTrack) {
+        nextStream.getTracks().forEach(track => track.stop());
+        throw new Error('Не удалось запустить выбранную камеру.');
+      }
+      await Promise.all([...peerConnectionsRef.current.values()].map(pc => {
+        const sender = pc.getTransceivers().find(t => t.receiver.track.kind === 'video')?.sender;
+        return sender ? sender.replaceTrack(nextTrack) : Promise.resolve();
+      }));
       localVideoStreamRef.current = nextStream;
+      if (localVideoRef.current) {
+        localVideoRef.current.srcObject = nextStream;
+        await localVideoRef.current.play().catch(() => {});
+      }
       setVoiceCameraFacing(nextFacing);
-      setVoiceError('');
       setVoiceStatus(nextFacing === 'user' ? 'Переключено на фронтальную камеру' : 'Переключено на основную камеру');
-      previousStream?.getTracks().forEach(track => track.stop());
     } catch (cameraErr) {
       setVoiceError(cameraErr.name === 'NotAllowedError'
         ? 'Нет доступа к камере. Разреши KENTY использовать камеру в настройках браузера.'
-        : cameraErr.name === 'OverconstrainedError'
-          ? 'Эта камера недоступна на устройстве.'
+        : cameraErr.name === 'OverconstrainedError' || cameraErr.name === 'NotFoundError'
+          ? 'Вторая камера не найдена или недоступна на этом устройстве.'
           : cameraErr.message || 'Не удалось переключить камеру.');
+    } finally {
+      setVoiceCameraSwitching(false);
     }
   }
 
@@ -1200,7 +1262,7 @@ export default function App() {
           {!connected ? <form className="join-panel" onSubmit={joinVoiceRoom}><div className="panel-heading"><div><span className="eyebrow">ПОДКЛЮЧЕНИЕ</span><h2>Войти в «{selectedRoom.label}»</h2></div></div><div className="form-grid"><label><span>ТВОЁ ИМЯ</span><input value={voiceName} onChange={e => setVoiceName(e.target.value)} placeholder="Твоё имя" /></label></div><button type="button" className={"noise-toggle " + (noiseSuppression ? "active" : "")} aria-pressed={noiseSuppression} onClick={toggleNoiseSuppression}><span className="noise-toggle-icon">✦</span><span><b>Шумоподавление</b><small>{noiseSuppression ? 'Включено · подавляет фоновые шумы' : 'Выключено · исходный звук микрофона'}</small></span><span className="noise-toggle-state">{noiseSuppression ? 'ВКЛ' : 'ВЫКЛ'}</span></button>{voiceError && <div className="error-box">{voiceError}</div>}<div className="join-bottom"><div className="join-hint">Выбирай комнату и подключайся — код не нужен.</div><button className="primary-button" disabled={joining}>{joining ? 'Подключаем…' : 'Войти в комнату →'}</button></div></form> : <section className="live-panel"><div className="panel-heading"><div><span className="eyebrow">ТЫ В КОМНАТЕ</span><h2>{selectedRoom.label}</h2></div><span className="live-badge"><i /> В ЭФИРЕ</span></div><div className="voice-video-grid">
               {cameraEnabled && <div className="voice-video-tile local-video-tile"><video ref={localVideoRef} autoPlay playsInline muted /><span>Ты · камера включена</span></div>}
               {Object.entries(remoteVideoStreams).map(([peerId, stream]) => <div className="voice-video-tile" key={peerId}><video autoPlay playsInline ref={element => { if (element && element.srcObject !== stream) element.srcObject = stream; }} /><span>{participants.find(person => person.id === peerId)?.name || 'Участник'}</span></div>)}
-            </div><div className="participant-heading">УЧАСТНИКИ · {participants.length}</div><div className="participant-list">{participants.map(p => <div className="participant" key={p.id}><div className="participant-avatar">{p.name[0]?.toUpperCase()}</div><div className="participant-name"><b>{p.name}{p.local ? ' (ты)' : ''}</b><small>{p.speaking ? 'Говорит' : 'На связи'}</small></div><span className="mic-state">{p.muted ? 'Микрофон выкл.' : 'Микрофон вкл.'}</span></div>)}</div><div className="voice-controls"><button type="button" className={"control-button " + (!micEnabled ? "control-muted" : "")} aria-pressed={micEnabled} onClick={toggleMic}>{micEnabled ? '🎙 Выключить микрофон' : '🔇 Включить микрофон'}</button><button type="button" className={"control-button voice-camera-button " + (cameraEnabled ? "camera-live-active" : "")} aria-pressed={cameraEnabled} onClick={toggleVoiceCamera}>{cameraEnabled ? '📷 Выключить камеру' : '📷 Включить камеру'}</button>{cameraEnabled && <button type="button" className="control-button voice-camera-switch" onClick={switchVoiceCamera}>🔄 Перевернуть камеру</button>}<button type="button" className={"control-button noise-live-button " + (noiseSuppression ? "noise-live-active" : "")} aria-pressed={noiseSuppression} onClick={toggleNoiseSuppression}>✦ Шумоподавление: {noiseSuppression ? 'ВКЛ' : 'ВЫКЛ'}</button><button className="leave-button" onClick={leaveVoiceRoom}>Выйти из комнаты</button></div></section>}
+            </div><div className="participant-heading">УЧАСТНИКИ · {participants.length}</div><div className="participant-list">{participants.map(p => <div className="participant" key={p.id}><div className="participant-avatar">{p.name[0]?.toUpperCase()}</div><div className="participant-name"><b>{p.name}{p.local ? ' (ты)' : ''}</b><small>{p.speaking ? 'Говорит' : 'На связи'}</small></div><span className="mic-state">{p.muted ? 'Микрофон выкл.' : 'Микрофон вкл.'}</span></div>)}</div><div className="voice-controls"><button type="button" className={"control-button " + (!micEnabled ? "control-muted" : "")} aria-pressed={micEnabled} onClick={toggleMic}>{micEnabled ? '🎙 Выключить микрофон' : '🔇 Включить микрофон'}</button><button type="button" className={"control-button voice-camera-button " + (cameraEnabled ? "camera-live-active" : "")} aria-pressed={cameraEnabled} onClick={toggleVoiceCamera}>{cameraEnabled ? '📷 Выключить камеру' : '📷 Включить камеру'}</button>{cameraEnabled && <button type="button" className="control-button voice-camera-switch" onClick={switchVoiceCamera} disabled={voiceCameraSwitching}>{voiceCameraSwitching ? "⏳ Переключаем…" : "🔄 Перевернуть камеру"}</button>}<button type="button" className={"control-button noise-live-button " + (noiseSuppression ? "noise-live-active" : "")} aria-pressed={noiseSuppression} onClick={toggleNoiseSuppression}>✦ Шумоподавление: {noiseSuppression ? 'ВКЛ' : 'ВЫКЛ'}</button><button className="leave-button" onClick={leaveVoiceRoom}>Выйти из комнаты</button></div></section>}
           <div className="status-line">{voiceStatus}</div><div className="alpha-note">Голос идёт напрямую между участниками через WebRTC. Комнаты доступны владельцу и принятым друзьям.</div><div className="audio-bin" ref={audioRef} />
         </div>}
       </section>
