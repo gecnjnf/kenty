@@ -290,31 +290,79 @@ export default function App() {
   }
 
   async function loadSocial() {
-    const { data: fs, error: fe } = await supabase.from('friendships')
-      .select('id,requester_id,addressee_id,status,created_at')
-      .or('requester_id.eq.' + session.user.id + ',addressee_id.eq.' + session.user.id)
-      .order('created_at', { ascending: false });
-    if (fe) { setError(fe.message); return; }
-    const ids = [...new Set((fs || []).flatMap(x => [x.requester_id, x.addressee_id]).filter(x => x !== session.user.id))];
-    let people = [];
-    if (ids.length) {
-      const { data } = await supabase.from('profiles').select('id,username,display_name,avatar_url').in('id', ids);
-      people = data || [];
+    const userId = session?.user?.id;
+    if (!userId) {
+      setFriendships([]);
+      setConversations([]);
+      return;
     }
-    setFriendships((fs || []).map(f => ({ ...f, person: people.find(p => p.id === (f.requester_id === session.user.id ? f.addressee_id : f.requester_id)) })));
-    const { data: convs } = await supabase.from('conversations').select('id,title,conversation_type,created_at').order('created_at', { ascending: false });
-    const { data: memberships } = await supabase.from('conversation_members').select('conversation_id,user_id');
-    const myIds = new Set((memberships || []).filter(m => m.user_id === session.user.id).map(m => m.conversation_id));
-    const mine = (convs || []).filter(c => myIds.has(c.id));
-    const allUserIds = [...new Set((memberships || []).filter(m => myIds.has(m.conversation_id) && m.user_id !== session.user.id).map(m => m.user_id))];
-    let memberProfiles = [];
-    if (allUserIds.length) {
-      const { data } = await supabase.from('profiles').select('id,username,display_name,avatar_url').in('id', allUserIds);
-      memberProfiles = data || [];
+
+    const [friendshipsResult, ownMembershipsResult] = await Promise.all([
+      supabase.from('friendships')
+        .select('id,requester_id,addressee_id,status,created_at')
+        .or('requester_id.eq.' + userId + ',addressee_id.eq.' + userId)
+        .order('created_at', { ascending: false }),
+      supabase.from('conversation_members')
+        .select('conversation_id,user_id')
+        .eq('user_id', userId)
+    ]);
+
+    if (friendshipsResult.error) {
+      setError('Не удалось загрузить друзей: ' + friendshipsResult.error.message);
+      return;
     }
-    setConversations(mine.map(c => {
-      const otherId = (memberships || []).find(m => m.conversation_id === c.id && m.user_id !== session.user.id)?.user_id;
-      return { ...c, person: memberProfiles.find(p => p.id === otherId) };
+    if (ownMembershipsResult.error) {
+      setError('Не удалось загрузить список переписок: ' + ownMembershipsResult.error.message);
+      return;
+    }
+
+    const fs = friendshipsResult.data || [];
+    const conversationIds = [...new Set((ownMembershipsResult.data || []).map(item => item.conversation_id))];
+    const friendIds = [...new Set(fs.flatMap(item => [item.requester_id, item.addressee_id]).filter(id => id !== userId))];
+
+    const [friendProfilesResult, conversationsResult, membershipsResult] = await Promise.all([
+      friendIds.length
+        ? supabase.from('profiles').select('id,username,display_name,avatar_url').in('id', friendIds)
+        : Promise.resolve({ data: [], error: null }),
+      conversationIds.length
+        ? supabase.from('conversations')
+            .select('id,title,conversation_type,created_at')
+            .in('id', conversationIds)
+            .order('created_at', { ascending: false })
+        : Promise.resolve({ data: [], error: null }),
+      conversationIds.length
+        ? supabase.from('conversation_members')
+            .select('conversation_id,user_id')
+            .in('conversation_id', conversationIds)
+        : Promise.resolve({ data: [], error: null })
+    ]);
+
+    if (friendProfilesResult.error || conversationsResult.error || membershipsResult.error) {
+      const queryError = friendProfilesResult.error || conversationsResult.error || membershipsResult.error;
+      setError('Не удалось обновить список друзей и переписок: ' + queryError.message);
+      return;
+    }
+
+    const people = friendProfilesResult.data || [];
+    const memberships = membershipsResult.data || [];
+    const memberIds = [...new Set(memberships.filter(item => item.user_id !== userId).map(item => item.user_id))];
+    const memberProfilesResult = memberIds.length
+      ? await supabase.from('profiles').select('id,username,display_name,avatar_url').in('id', memberIds)
+      : { data: [], error: null };
+
+    if (memberProfilesResult.error) {
+      setError('Не удалось загрузить участников переписок: ' + memberProfilesResult.error.message);
+      return;
+    }
+
+    const memberProfiles = memberProfilesResult.data || [];
+    setFriendships(fs.map(item => ({
+      ...item,
+      person: people.find(person => person.id === (item.requester_id === userId ? item.addressee_id : item.requester_id))
+    })));
+    setConversations((conversationsResult.data || []).map(conversation => {
+      const otherId = memberships.find(item => item.conversation_id === conversation.id && item.user_id !== userId)?.user_id;
+      return { ...conversation, person: memberProfiles.find(person => person.id === otherId) };
     }));
   }
 
