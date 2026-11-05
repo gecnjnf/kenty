@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
+import { Room, RoomEvent, Track } from 'livekit-client';
 
 const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_ANON_KEY);
 const messageTimeFormatter = new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit' });
@@ -91,6 +92,7 @@ export default function App() {
   const [voiceError, setVoiceError] = useState('');
   const [voiceStatus, setVoiceStatus] = useState('Голосовые комнаты готовы к подключению');
   const voiceChannelRef = useRef(null);
+  const liveKitRoomRef = useRef(null);
   const localStreamRef = useRef(null);
   const peerConnectionsRef = useRef(new Map());
   const offeredToRef = useRef(new Set());
@@ -677,239 +679,202 @@ export default function App() {
   const activeVoiceOwner = voiceOwners.find(x => x.id === selectedVoiceOwnerId) || voiceOwners[0];
 
   function updateVoiceParticipants() {
-    const channel = voiceChannelRef.current;
-    const state = channel?.presenceState?.() || {};
-    const peers = Object.values(state).flat().filter(p => p.userId && p.userId !== session?.user?.id);
-    const unique = new Map(peers.map(p => [p.userId, p]));
+    const room = liveKitRoomRef.current;
+    if (!room) return;
+    const local = room.localParticipant;
+    const activeIds = new Set((room.activeSpeakers || []).map(person => person.identity));
+    const remote = [...room.remoteParticipants.values()];
     setParticipants([
-      { id: session.user.id, name: voiceName || profile?.display_name || profile?.username || 'Ты', muted: !micEnabledRef.current, speaking: false, local: true },
-      ...[...unique.values()].map(p => ({ id: p.userId, name: p.name || 'Участник', muted: Boolean(p.muted), speaking: false, local: false }))
+      {
+        id: local.identity,
+        name: local.name || voiceName || profile?.display_name || 'Ты',
+        muted: !local.isMicrophoneEnabled,
+        speaking: activeIds.has(local.identity),
+        local: true
+      },
+      ...remote.map(person => ({
+        id: person.identity,
+        name: person.name || 'Участник',
+        muted: !person.isMicrophoneEnabled,
+        speaking: activeIds.has(person.identity),
+        local: false
+      }))
     ]);
+    setRemoteScreenShares(Object.fromEntries(
+      remote.filter(person => person.isScreenShareEnabled).map(person => [person.identity, true])
+    ));
   }
 
-  async function sendVoiceSignal(to, signal) {
-    const channel = voiceChannelRef.current;
-    if (!channel) return;
-    await channel.send({ type: 'broadcast', event: 'signal', payload: { from: session.user.id, to, ...signal } });
-  }
-
-  function closePeerConnection(remoteId) {
-    const pc = peerConnectionsRef.current.get(remoteId);
-    if (pc) {
-      pc.onicecandidate = null;
-      pc.ontrack = null;
-      pc.onconnectionstatechange = null;
-      pc.close();
-      peerConnectionsRef.current.delete(remoteId);
-    }
-    setRemoteVideoStreams(current => { if (!current[remoteId]) return current; const next = { ...current }; delete next[remoteId]; return next; });
-    setRemoteScreenShares(current => { if (!current[remoteId]) return current; const next = { ...current }; delete next[remoteId]; return next; });
-    const audio = audioElementsRef.current.get(remoteId);
-    if (audio) {
-      audio.pause();
-      audio.srcObject = null;
-      audio.remove();
-      audioElementsRef.current.delete(remoteId);
-    }
-    offeredToRef.current.delete(remoteId);
-    pendingCandidatesRef.current.delete(remoteId);
-    participantNamesRef.current.delete(remoteId);
-  }
-
-  function createPeerConnection(remoteId, remoteName = 'Участник') {
-    const existing = peerConnectionsRef.current.get(remoteId);
-    if (existing && existing.connectionState !== 'closed') return existing;
-    if (existing) closePeerConnection(remoteId);
-    const pc = new RTCPeerConnection({
-      iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun.cloudflare.com:3478' }
-      ]
-    });
-    const stream = localStreamRef.current;
-    stream?.getAudioTracks().forEach(track => pc.addTrack(track, stream));
-    const videoTransceiver = pc.addTransceiver('video', { direction: 'sendrecv' });
-    const activeVideoTrack = localVideoStreamRef.current?.getVideoTracks()?.[0];
-    if (activeVideoTrack) videoTransceiver.sender.replaceTrack(activeVideoTrack).catch(err => console.warn('KENTY video sender:', err));
-    pc.onicecandidate = event => {
-      if (event.candidate) sendVoiceSignal(remoteId, { kind: 'candidate', candidate: event.candidate.toJSON() }).catch(() => {});
-    };
-    pc.ontrack = event => {
-      if (event.track.kind === 'video') {
-        const videoStream = event.streams[0] || new MediaStream([event.track]);
-        const showRemoteVideo = () => setRemoteVideoStreams(current => ({ ...current, [remoteId]: videoStream }));
-        const hideRemoteVideo = () => setRemoteVideoStreams(current => { const next = { ...current }; delete next[remoteId]; return next; });
-        event.track.onunmute = showRemoteVideo;
-        event.track.onmute = hideRemoteVideo;
-        event.track.onended = hideRemoteVideo;
-        if (!event.track.muted) showRemoteVideo();
-        return;
-      }
-      let audio = audioElementsRef.current.get(remoteId);
-      if (!audio) {
-        audio = document.createElement('audio');
-        audio.autoplay = true;
-        audio.playsInline = true;
-        audio.setAttribute('data-voice-peer', remoteId);
-        audioRef.current?.appendChild(audio);
-        audioElementsRef.current.set(remoteId, audio);
-      }
-      audio.srcObject = event.streams[0] || new MediaStream([event.track]);
-      audio.play().catch(() => setVoiceError('Нажми на экран, чтобы разрешить воспроизведение звука.'));
-    };
-    pc.onconnectionstatechange = () => {
-      if (pc.connectionState === 'failed') setVoiceError('Не удалось соединиться с одним из участников. Возможно, сети нужен TURN-сервер.');
-      if (pc.connectionState === 'connected') setVoiceError('');
-    };
-    peerConnectionsRef.current.set(remoteId, pc);
-    participantNamesRef.current.set(remoteId, remoteName);
-    return pc;
-  }
-
-  async function handleVoiceSignal(payload) {
-    if (!payload || payload.to !== session.user.id || !payload.from) return;
-    if (payload.kind === 'screen-share-state') {
-      setRemoteScreenShares(current => ({ ...current, [payload.from]: Boolean(payload.sharing) }));
+  function handleLiveKitTrackSubscribed(track, publication, participant) {
+    if (track.kind === Track.Kind.Audio) {
+      const element = track.attach();
+      const key = participant.identity + ':' + (publication.trackSid || track.sid || 'audio');
+      element.autoplay = true;
+      element.playsInline = true;
+      element.setAttribute('data-voice-peer', participant.identity);
+      audioRef.current?.appendChild(element);
+      audioElementsRef.current.set(key, element);
+      element.play?.().catch?.(() => setVoiceError('Нажми на экран, чтобы разрешить воспроизведение звука.'));
       return;
     }
-    const pc = createPeerConnection(payload.from, participantNamesRef.current.get(payload.from) || 'Участник');
-    try {
-      if (payload.kind === 'offer') {
-        await pc.setRemoteDescription(new RTCSessionDescription(payload.description));
-        const queued = pendingCandidatesRef.current.get(payload.from) || [];
-        for (const candidate of queued) await pc.addIceCandidate(new RTCIceCandidate(candidate));
-        pendingCandidatesRef.current.delete(payload.from);
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
-        await sendVoiceSignal(payload.from, { kind: 'answer', description: pc.localDescription });
-      } else if (payload.kind === 'answer') {
-        if (pc.signalingState !== 'have-local-offer') return;
-        await pc.setRemoteDescription(new RTCSessionDescription(payload.description));
-        const queued = pendingCandidatesRef.current.get(payload.from) || [];
-        for (const candidate of queued) await pc.addIceCandidate(new RTCIceCandidate(candidate));
-        pendingCandidatesRef.current.delete(payload.from);
-      } else if (payload.kind === 'candidate') {
-        if (pc.remoteDescription) await pc.addIceCandidate(new RTCIceCandidate(payload.candidate));
-        else pendingCandidatesRef.current.set(payload.from, [...(pendingCandidatesRef.current.get(payload.from) || []), payload.candidate]);
+    if (track.kind === Track.Kind.Video) {
+      const stream = new MediaStream([track.mediaStreamTrack]);
+      setRemoteVideoStreams(current => ({ ...current, [participant.identity]: stream }));
+      if (publication.source === Track.Source.ScreenShare) {
+        setRemoteScreenShares(current => ({ ...current, [participant.identity]: true }));
       }
-    } catch (signalError) {
-      console.error('KENTY voice signaling error:', signalError);
-      setVoiceError('Не удалось согласовать голосовое соединение. Попробуй выйти и зайти снова.');
+    }
+  }
+
+  function handleLiveKitTrackUnsubscribed(track, publication, participant) {
+    const key = participant.identity + ':' + (publication.trackSid || track.sid || 'audio');
+    track.detach();
+    const element = audioElementsRef.current.get(key);
+    if (element) {
+      element.pause?.();
+      element.srcObject = null;
+      element.remove();
+      audioElementsRef.current.delete(key);
+    }
+    if (track.kind === Track.Kind.Video) {
+      setRemoteVideoStreams(current => {
+        const next = { ...current };
+        if (next[participant.identity]?.getTracks?.().includes(track.mediaStreamTrack)) {
+          delete next[participant.identity];
+        }
+        return next;
+      });
+      if (publication.source === Track.Source.ScreenShare) {
+        setRemoteScreenShares(current => ({ ...current, [participant.identity]: false }));
+      }
     }
   }
 
   async function joinVoiceRoom(e) {
     e.preventDefault();
     setVoiceError('');
-    if (!voiceName.trim()) { setVoiceError('Введи своё имя.'); return; }
-    if (!navigator.mediaDevices?.getUserMedia) { setVoiceError('Браузер не поддерживает доступ к микрофону. Открой KENTY по HTTPS.'); return; }
+    if (!voiceName.trim() || voiceName.trim().length < 2) {
+      setVoiceError('Введи имя минимум из двух символов.');
+      return;
+    }
+    if (!session?.user?.id) {
+      setVoiceError('Сначала войди в аккаунт KENTY.');
+      return;
+    }
+
     setJoining(true);
-    setVoiceStatus('Запрашиваем доступ к микрофону…');
+    setVoiceStatus('Проверяем доступ и готовим защищённое подключение…');
+    let room = null;
     try {
       const { data: authData, error: authError } = await supabase.auth.getSession();
-      if (authError) throw new Error('Не удалось проверить вход в аккаунт: ' + authError.message);
+      if (authError) throw new Error('Не удалось проверить вход: ' + authError.message);
       const accessToken = authData.session?.access_token;
-      if (!accessToken) throw new Error('Сессия закончилась. Выйди из KENTY и войди снова.');
-      await supabase.realtime.setAuth(accessToken);
+      if (!accessToken) throw new Error('Сессия закончилась. Войди в KENTY заново.');
 
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: { ideal: true },
-          noiseSuppression: noiseSuppressionRef.current,
-          autoGainControl: { ideal: true },
-          channelCount: { ideal: 1 }
+      const roomName = (activeVoiceOwner?.id || session.user.id) + ':' + selectedRoom.id;
+      const tokenResponse = await fetch('/api/token', {
+        method: 'POST',
+        cache: 'no-store',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer ' + accessToken
         },
-        video: false
+        body: JSON.stringify({ roomName, displayName: voiceName.trim() })
       });
-      localStreamRef.current = stream;
-      stream.getAudioTracks().forEach(track => {
-        track.onended = () => {
-          if (localStreamRef.current === stream) {
-            micEnabledRef.current = false;
-            setMicEnabled(false);
-            setVoiceError('Микрофон отключился. Проверь устройство и подключись снова.');
-          }
-        };
-      });
-      const topic = `voice:${activeVoiceOwner?.id || session.user.id}:${selectedRoom.id}`;
-      const channel = supabase.channel(topic, {
-        config: { private: true, broadcast: { self: false, ack: true }, presence: { key: session.user.id } }
-      });
-      voiceChannelRef.current = channel;
-      channel.on('broadcast', { event: 'signal' }, ({ payload }) => { handleVoiceSignal(payload); });
-      channel.on('presence', { event: 'sync' }, async () => {
-        const state = channel.presenceState();
-        const peers = Object.values(state).flat().filter(p => p.userId && p.userId !== session.user.id);
-        const activePeerIds = new Set(peers.map(peer => peer.userId));
-        for (const peerId of [...peerConnectionsRef.current.keys()]) {
-          if (!activePeerIds.has(peerId)) closePeerConnection(peerId);
-        }
-        for (const peer of peers) {
-          participantNamesRef.current.set(peer.userId, peer.name || 'Участник');
-          const pc = createPeerConnection(peer.userId, peer.name || 'Участник');
-          if (session.user.id < peer.userId && !offeredToRef.current.has(peer.userId) && pc.signalingState === 'stable') {
-            offeredToRef.current.add(peer.userId);
-            try {
-              const offer = await pc.createOffer();
-              await pc.setLocalDescription(offer);
-              await sendVoiceSignal(peer.userId, { kind: 'offer', description: pc.localDescription });
-            } catch (offerError) {
-              offeredToRef.current.delete(peer.userId);
-              console.error('KENTY voice offer error:', offerError);
-            }
-          }
-        }
-        updateVoiceParticipants();
-      });
-      const status = await new Promise((resolve, reject) => {
-        const timeout = window.setTimeout(() => reject(new Error('Тайм-аут: Supabase не подтвердил вход в голосовую комнату за 15 секунд. Проверь интернет и попробуй ещё раз.')), 15000);
-        channel.subscribe((result, subscribeError) => {
-          if (result === 'SUBSCRIBED') { window.clearTimeout(timeout); resolve(result); }
-          if (result === 'CHANNEL_ERROR' || result === 'TIMED_OUT' || result === 'CLOSED') {
-            window.clearTimeout(timeout);
-            const detail = subscribeError?.message || subscribeError?.cause?.message || '';
-            console.error('KENTY Realtime subscribe failed:', result, subscribeError);
-            reject(new Error(detail
-              ? 'Сервер отклонил вход: ' + detail
-              : result === 'TIMED_OUT'
-                ? 'Сервер не ответил вовремя. Попробуй ещё раз.'
-                : 'Сервер не разрешил открыть комнату (' + result + '). Проверь, что аккаунт активен и ты владелец комнаты или её друг.'));
-          }
-        });
-      });
-      if (status !== 'SUBSCRIBED') throw new Error('Не удалось подключиться к голосовой комнате.');
-      micEnabledRef.current = true;
-      const presenceResult = await channel.track({ userId: session.user.id, name: voiceName.trim(), muted: false, joinedAt: new Date().toISOString() });
-      if (presenceResult !== 'ok') {
-        console.error('KENTY presence track failed:', presenceResult);
-        throw new Error('Сервер подключил канал, но не зарегистрировал тебя в комнате. Статус: ' + String(presenceResult));
+      const tokenData = await tokenResponse.json().catch(() => ({}));
+      if (!tokenResponse.ok || !tokenData.participantToken || !tokenData.serverUrl) {
+        throw new Error(tokenData.error || 'Сервер не выдал токен для голосовой комнаты.');
       }
+
+      room = new Room({ adaptiveStream: true, dynacast: true });
+      liveKitRoomRef.current = room;
+
+      room
+        .on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
+          handleLiveKitTrackSubscribed(track, publication, participant);
+          updateVoiceParticipants();
+        })
+        .on(RoomEvent.TrackUnsubscribed, (track, publication, participant) => {
+          handleLiveKitTrackUnsubscribed(track, publication, participant);
+          updateVoiceParticipants();
+        })
+        .on(RoomEvent.ParticipantConnected, updateVoiceParticipants)
+        .on(RoomEvent.ParticipantDisconnected, participant => {
+          setRemoteVideoStreams(current => {
+            const next = { ...current };
+            delete next[participant.identity];
+            return next;
+          });
+          setRemoteScreenShares(current => {
+            const next = { ...current };
+            delete next[participant.identity];
+            return next;
+          });
+          updateVoiceParticipants();
+        })
+        .on(RoomEvent.ActiveSpeakersChanged, updateVoiceParticipants)
+        .on(RoomEvent.LocalTrackUnpublished, publication => {
+          if (publication.source === Track.Source.Camera) setCameraEnabled(false);
+          if (publication.source === Track.Source.ScreenShare) setScreenSharing(false);
+          updateVoiceParticipants();
+        })
+        .on(RoomEvent.ConnectionStateChanged, state => {
+          setVoiceStatus(state === 'connected' ? 'Связь с голосовой комнатой установлена' : 'Состояние соединения: ' + state);
+        })
+        .on(RoomEvent.AudioPlaybackStatusChanged, () => {
+          if (!room.canPlaybackAudio) {
+            setVoiceError('Звук заблокирован браузером. Нажми на экран и повтори подключение звука.');
+          } else {
+            setVoiceError('');
+          }
+        })
+        .on(RoomEvent.Disconnected, () => {
+          setConnected(false);
+          setMicEnabled(false);
+          setCameraEnabled(false);
+          setScreenSharing(false);
+          setParticipants([]);
+          setRemoteVideoStreams({});
+          setRemoteScreenShares({});
+        });
+
+      await room.prepareConnection(tokenData.serverUrl, tokenData.participantToken).catch(() => {});
+      await room.connect(tokenData.serverUrl, tokenData.participantToken);
+      await room.localParticipant.setMicrophoneEnabled(true, {
+        echoCancellation: true,
+        noiseSuppression: noiseSuppressionRef.current,
+        autoGainControl: true,
+        channelCount: 1
+      });
+      await room.startAudio().catch(() => {});
+
       setConnected(true);
-      micEnabledRef.current = true;
       setMicEnabled(true);
+      setCameraEnabled(false);
+      setScreenSharing(false);
+      setVoiceError('');
       setVoiceStatus('Подключено к «' + selectedRoom.label + '» · ' + (activeVoiceOwner?.label || 'Моя комната'));
       updateVoiceParticipants();
-    } catch (e2) {
-      const channel = voiceChannelRef.current;
-      voiceChannelRef.current = null;
-      if (channel) await supabase.removeChannel(channel).catch(() => {});
-      [...peerConnectionsRef.current.keys()].forEach(closePeerConnection);
-      peerConnectionsRef.current.clear();
-      offeredToRef.current.clear();
-      pendingCandidatesRef.current.clear();
-      localStreamRef.current?.getTracks().forEach(track => track.stop());
-      localStreamRef.current = null;
-      localVideoStreamRef.current?.getTracks().forEach(track => track.stop());
-      localVideoStreamRef.current = null;
-      localScreenShareRef.current?.getTracks().forEach(track => track.stop());
-      localScreenShareRef.current = null;
-      setScreenSharing(false);
-      setCameraEnabled(false);
-      setRemoteVideoStreams({});
-      if (audioRef.current) audioRef.current.innerHTML = '';
+    } catch (joinError) {
+      if (room) {
+        try { await room.disconnect(); } catch {}
+      }
+      if (liveKitRoomRef.current === room) liveKitRoomRef.current = null;
+      audioElementsRef.current.forEach(element => {
+        element.pause?.();
+        element.srcObject = null;
+        element.remove();
+      });
+      audioElementsRef.current.clear();
       setConnected(false);
-      console.error('KENTY voice join failed:', e2);
-      setVoiceError(e2.message || 'Не удалось подключиться к голосовой комнате.');
+      setMicEnabled(false);
+      setCameraEnabled(false);
+      setScreenSharing(false);
+      setParticipants([]);
+      setRemoteVideoStreams({});
+      setRemoteScreenShares({});
+      console.error('KENTY LiveKit join failed:', joinError);
+      setVoiceError(joinError.message || 'Не удалось подключиться к голосовой комнате.');
       setVoiceStatus('Не удалось подключиться');
     } finally {
       setJoining(false);
@@ -917,31 +882,25 @@ export default function App() {
   }
 
   async function leaveVoiceRoom() {
-    if (localScreenShareRef.current) await stopScreenShare();
-    const channel = voiceChannelRef.current;
-    voiceChannelRef.current = null;
-    if (channel) await supabase.removeChannel(channel).catch(() => {});
-    [...peerConnectionsRef.current.keys()].forEach(closePeerConnection);
-    peerConnectionsRef.current.clear();
-    offeredToRef.current.clear();
-    pendingCandidatesRef.current.clear();
-    participantNamesRef.current.clear();
-    localStreamRef.current?.getTracks().forEach(track => track.stop());
-    localStreamRef.current = null;
-    localVideoStreamRef.current?.getTracks().forEach(track => track.stop());
-    localVideoStreamRef.current = null;
-    localScreenShareRef.current?.getTracks().forEach(track => track.stop());
-    localScreenShareRef.current = null;
-    setScreenSharing(false);
-    setRemoteScreenShares({});
-    setCameraEnabled(false);
-    setRemoteVideoStreams({});
-    audioElementsRef.current.forEach(audio => { audio.pause(); audio.srcObject = null; audio.remove(); });
+    const room = liveKitRoomRef.current;
+    liveKitRoomRef.current = null;
+    if (room) {
+      try { await room.disconnect(); } catch (disconnectError) {
+        console.warn('KENTY LiveKit disconnect:', disconnectError);
+      }
+    }
+    audioElementsRef.current.forEach(element => {
+      element.pause?.();
+      element.srcObject = null;
+      element.remove();
+    });
     audioElementsRef.current.clear();
-    if (audioRef.current) audioRef.current.innerHTML = '';
+    setRemoteVideoStreams({});
+    setRemoteScreenShares({});
     setConnected(false);
-    micEnabledRef.current = false;
     setMicEnabled(false);
+    setCameraEnabled(false);
+    setScreenSharing(false);
     setParticipants([]);
     setVoiceStatus('Ты вышел из комнаты');
   }
@@ -951,25 +910,17 @@ export default function App() {
     noiseSuppressionRef.current = next;
     setNoiseSuppression(next);
     localStorage.setItem('kenty-noise-suppression', String(next));
-    const track = localStreamRef.current?.getAudioTracks()?.[0];
-    if (track && connected) {
+    const room = liveKitRoomRef.current;
+    const localTrack = room?.localParticipant.getTrackPublication(Track.Source.Microphone)?.track;
+    const mediaTrack = localTrack?.mediaStreamTrack;
+    if (mediaTrack && connected) {
       try {
-        const supported = navigator.mediaDevices?.getSupportedConstraints?.() || {};
-        if (!('noiseSuppression' in supported)) {
-          setVoiceError('Этот браузер не поддерживает переключение шумоподавления во время звонка. Переподключись, чтобы применить настройку.');
-          return;
-        }
-        await track.applyConstraints({ noiseSuppression: next });
-        const actual = track.getSettings?.().noiseSuppression;
-        if (typeof actual === 'boolean' && actual !== next) {
-          setVoiceError('Браузер не применил настройку шумоподавления. Возможно, устройство не поддерживает её.');
-          return;
-        }
+        await mediaTrack.applyConstraints({ noiseSuppression: next });
         setVoiceError('');
         setVoiceStatus(next ? 'Шумоподавление включено' : 'Шумоподавление выключено');
-      } catch (err) {
-        console.warn('KENTY noise suppression constraint:', err);
-        setVoiceError('Не удалось изменить шумоподавление. Попробуй переподключиться к комнате.');
+      } catch (constraintError) {
+        console.warn('KENTY noise suppression constraint:', constraintError);
+        setVoiceError('Не удалось изменить шумоподавление. Настройка сохранена для следующего подключения.');
       }
     } else {
       setVoiceStatus(next ? 'Шумоподавление включено для следующего подключения' : 'Шумоподавление выключено для следующего подключения');
@@ -977,231 +928,117 @@ export default function App() {
   }
 
   async function toggleVoiceCamera() {
-    if (!connected) return;
-    const previousStream = localVideoStreamRef.current;
-    if (cameraEnabled && previousStream) {
-      const senders = [...peerConnectionsRef.current.values()].map(pc => pc.getTransceivers().find(t => t.receiver.track.kind === 'video')?.sender).filter(Boolean);
-      await Promise.all(senders.map(sender => sender.replaceTrack(null).catch(err => console.warn('KENTY camera stop:', err))));
-      previousStream.getTracks().forEach(track => track.stop());
-      localVideoStreamRef.current = null;
-      setCameraEnabled(false);
-      setVoiceError('');
-      setVoiceStatus('Камера выключена');
-      return;
-    }
+    const room = liveKitRoomRef.current;
+    if (!room || !connected) return;
+    const next = !cameraEnabled;
     try {
-      if (!navigator.mediaDevices?.getUserMedia) throw new Error('Браузер не поддерживает камеру. Открой KENTY по HTTPS.');
-      const videoStream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: voiceCameraFacing }, width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 24, max: 30 } } });
-      const track = videoStream.getVideoTracks()[0];
-      if (!track) throw new Error('Камера не найдена на устройстве.');
-      const senders = [...peerConnectionsRef.current.values()].map(pc => pc.getTransceivers().find(t => t.receiver.track.kind === 'video')?.sender).filter(Boolean);
-      await Promise.all(senders.map(sender => sender.replaceTrack(track)));
-      localVideoStreamRef.current = videoStream;
-      setCameraEnabled(true);
+      await room.localParticipant.setCameraEnabled(next, { facingMode: voiceCameraFacing });
+      setCameraEnabled(next);
       setVoiceError('');
-      setVoiceStatus(voiceCameraFacing === 'user' ? 'Фронтальная камера включена · видео передаётся участникам' : 'Основная камера включена · видео передаётся участникам');
-      previousStream?.getTracks().forEach(oldTrack => oldTrack.stop());
-    } catch (cameraErr) {
-      setVoiceError(cameraErr.name === 'NotAllowedError' ? 'Нет доступа к камере. Разреши KENTY использовать камеру в настройках браузера.' : cameraErr.message || 'Не удалось включить камеру.');
+      setVoiceStatus(next ? 'Камера включена · видео передаётся участникам' : 'Камера выключена');
+    } catch (cameraError) {
+      setVoiceError(cameraError.name === 'NotAllowedError'
+        ? 'Нет доступа к камере. Разреши KENTY использовать камеру в настройках браузера.'
+        : cameraError.message || 'Не удалось изменить состояние камеры.');
     }
   }
 
   async function switchVoiceCamera() {
-    if (!connected || !cameraEnabled || voiceCameraSwitching) return;
+    const room = liveKitRoomRef.current;
+    if (!room || !connected || !cameraEnabled || voiceCameraSwitching || screenSharing) return;
     const nextFacing = voiceCameraFacing === 'user' ? 'environment' : 'user';
-    const previousStream = localVideoStreamRef.current;
-    const previousTrack = previousStream?.getVideoTracks()?.[0];
-    if (!previousTrack || !navigator.mediaDevices?.getUserMedia) {
-      setVoiceError('Камера недоступна. Попробуй выключить и снова включить её.');
+    const cameraTrack = room.localParticipant.getTrackPublication(Track.Source.Camera)?.track;
+    if (!cameraTrack?.restartTrack) {
+      setVoiceError('Не удалось переключить камеру. Выключи и снова включи её.');
       return;
     }
-
     setVoiceCameraSwitching(true);
-    setVoiceError('');
     try {
-      // Сначала просим текущую камеру сменить объектив: это надёжнее на Android,
-      // где одновременное открытие двух камер часто блокируется системой.
-      let switchedInPlace = false;
-      try {
-        await previousTrack.applyConstraints({ facingMode: { exact: nextFacing } });
-        const actualFacing = previousTrack.getSettings?.().facingMode;
-        switchedInPlace = !actualFacing || actualFacing === nextFacing;
-      } catch {
-        switchedInPlace = false;
-      }
-
-      if (switchedInPlace) {
-        setVoiceCameraFacing(nextFacing);
-        setVoiceStatus(nextFacing === 'user' ? 'Переключено на фронтальную камеру' : 'Переключено на основную камеру');
-        return;
-      }
-
-      // Резервный путь для браузеров без поддержки applyConstraints(facingMode).
-      previousTrack.stop();
-      let nextStream;
-      try {
-        nextStream = await navigator.mediaDevices.getUserMedia({
-          audio: false,
-          video: { facingMode: { exact: nextFacing }, width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 24, max: 30 } }
-        });
-      } catch (switchError) {
-        // Если выбранная камера недоступна, восстанавливаем прежнюю, чтобы звонок не остался без видео.
-        const restored = await navigator.mediaDevices.getUserMedia({
-          audio: false,
-          video: { facingMode: { ideal: voiceCameraFacing }, width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 24, max: 30 } }
-        }).catch(() => null);
-        if (restored) {
-          const restoredTrack = restored.getVideoTracks()[0];
-          localVideoStreamRef.current = restored;
-          await Promise.all([...peerConnectionsRef.current.values()].map(pc => {
-            const sender = pc.getTransceivers().find(t => t.receiver.track.kind === 'video')?.sender;
-            return sender ? sender.replaceTrack(restoredTrack) : Promise.resolve();
-          }));
-          if (localVideoRef.current) {
-            localVideoRef.current.srcObject = restored;
-            await localVideoRef.current.play().catch(() => {});
-          }
-        } else {
-          localVideoStreamRef.current = null;
-          setCameraEnabled(false);
-        }
-        throw switchError;
-      }
-
-      const nextTrack = nextStream.getVideoTracks()[0];
-      if (!nextTrack) {
-        nextStream.getTracks().forEach(track => track.stop());
-        throw new Error('Не удалось запустить выбранную камеру.');
-      }
-      await Promise.all([...peerConnectionsRef.current.values()].map(pc => {
-        const sender = pc.getTransceivers().find(t => t.receiver.track.kind === 'video')?.sender;
-        return sender ? sender.replaceTrack(nextTrack) : Promise.resolve();
-      }));
-      localVideoStreamRef.current = nextStream;
-      if (localVideoRef.current) {
-        localVideoRef.current.srcObject = nextStream;
-        await localVideoRef.current.play().catch(() => {});
-      }
+      await cameraTrack.restartTrack({ facingMode: nextFacing });
       setVoiceCameraFacing(nextFacing);
-      setVoiceStatus(nextFacing === 'user' ? 'Переключено на фронтальную камеру' : 'Переключено на основную камеру');
-    } catch (cameraErr) {
-      setVoiceError(cameraErr.name === 'NotAllowedError'
-        ? 'Нет доступа к камере. Разреши KENTY использовать камеру в настройках браузера.'
-        : cameraErr.name === 'OverconstrainedError' || cameraErr.name === 'NotFoundError'
-          ? 'Вторая камера не найдена или недоступна на этом устройстве.'
-          : cameraErr.message || 'Не удалось переключить камеру.');
+      setVoiceError('');
+      setVoiceStatus(nextFacing === 'user' ? 'Включена фронтальная камера' : 'Включена основная камера');
+    } catch (switchError) {
+      setVoiceError(switchError.message || 'Не удалось переключить камеру.');
     } finally {
       setVoiceCameraSwitching(false);
     }
   }
 
   useEffect(() => {
-    if (localVideoRef.current) {
-      localVideoRef.current.srcObject = screenSharing ? localScreenShareRef.current : cameraEnabled ? localVideoStreamRef.current : null;
-      if (screenSharing || cameraEnabled) localVideoRef.current.play().catch(() => {});
-    }
-  }, [cameraEnabled, screenSharing]);
+    const room = liveKitRoomRef.current;
+    const element = localVideoRef.current;
+    if (!room || !element || (!cameraEnabled && !screenSharing)) return undefined;
+    const source = screenSharing ? Track.Source.ScreenShare : Track.Source.Camera;
+    const publication = room.localParticipant.getTrackPublication(source);
+    const track = publication?.track;
+    if (!track) return undefined;
+    track.attach(element);
+    return () => { track.detach(element); };
+  }, [cameraEnabled, screenSharing, connected]);
 
   async function stopScreenShare() {
-    const displayStream = localScreenShareRef.current;
-    if (!displayStream) return;
-    localScreenShareRef.current = null;
-    displayStream.getTracks().forEach(track => { track.onended = null; track.stop(); });
-    const cameraTrack = cameraEnabled ? localVideoStreamRef.current?.getVideoTracks()?.[0] : null;
-    await Promise.all([...peerConnectionsRef.current.values()].map(pc => {
-      const sender = pc.getTransceivers().find(t => t.receiver.track.kind === 'video')?.sender;
-      return sender ? sender.replaceTrack(cameraTrack || null).catch(err => console.warn('KENTY screen share stop:', err)) : Promise.resolve();
-    }));
-    setScreenSharing(false);
-    if (localVideoRef.current) {
-      localVideoRef.current.srcObject = cameraEnabled ? localVideoStreamRef.current : null;
-      if (cameraEnabled) await localVideoRef.current.play().catch(() => {});
+    const room = liveKitRoomRef.current;
+    if (!room || !screenSharing) return;
+    try {
+      await room.localParticipant.setScreenShareEnabled(false);
+      setScreenSharing(false);
+      setVoiceError('');
+      setVoiceStatus('Демонстрация экрана остановлена');
+    } catch (shareError) {
+      setVoiceError(shareError.message || 'Не удалось остановить демонстрацию экрана.');
     }
-    const channel = voiceChannelRef.current;
-    if (channel) {
-      const peers = Object.values(channel.presenceState?.() || {}).flat().filter(peer => peer.userId && peer.userId !== session.user.id);
-      await Promise.all(peers.map(peer => sendVoiceSignal(peer.userId, { kind: 'screen-share-state', sharing: false }).catch(() => {})));
-    }
-    setVoiceStatus('Демонстрация экрана остановлена');
   }
 
   async function toggleScreenShare() {
-    if (!connected) return;
+    const room = liveKitRoomRef.current;
+    if (!room || !connected) return;
     if (screenSharing) {
       await stopScreenShare();
       return;
     }
-    if (!navigator.mediaDevices?.getDisplayMedia) {
-      setVoiceError('Этот браузер не поддерживает демонстрацию экрана. Попробуй открыть KENTY в Chrome или Edge на компьютере.');
-      return;
-    }
     try {
-      setVoiceError('');
-      const displayStream = await navigator.mediaDevices.getDisplayMedia({
-        video: { frameRate: { ideal: 15, max: 30 } },
-        audio: false
-      });
-      const displayTrack = displayStream.getVideoTracks()[0];
-      if (!displayTrack) {
-        displayStream.getTracks().forEach(track => track.stop());
-        throw new Error('Не удалось получить изображение экрана.');
-      }
-      await Promise.all([...peerConnectionsRef.current.values()].map(pc => {
-        const sender = pc.getTransceivers().find(t => t.receiver.track.kind === 'video')?.sender;
-        return sender ? sender.replaceTrack(displayTrack) : Promise.resolve();
-      }));
-      localScreenShareRef.current = displayStream;
+      await room.localParticipant.setScreenShareEnabled(true);
       setScreenSharing(true);
-      displayTrack.onended = () => {
-        if (localScreenShareRef.current === displayStream) stopScreenShare().catch(err => console.warn('KENTY screen share ended:', err));
-      };
-      if (localVideoRef.current) {
-        localVideoRef.current.srcObject = displayStream;
-        await localVideoRef.current.play().catch(() => {});
-      }
-      const channel = voiceChannelRef.current;
-      if (channel) {
-        const peers = Object.values(channel.presenceState?.() || {}).flat().filter(peer => peer.userId && peer.userId !== session.user.id);
-        await Promise.all(peers.map(peer => sendVoiceSignal(peer.userId, { kind: 'screen-share-state', sharing: true }).catch(() => {})));
-      }
+      setVoiceError('');
       setVoiceStatus('Ты показываешь экран участникам комнаты');
     } catch (shareError) {
-      if (shareError.name === 'NotAllowedError' || shareError.name === 'AbortError') {
-        setVoiceError('Демонстрация экрана отменена или доступ запрещён.');
-      } else {
-        setVoiceError(shareError.message || 'Не удалось начать демонстрацию экрана.');
-      }
+      setVoiceError(shareError.name === 'NotAllowedError' || shareError.name === 'AbortError'
+        ? 'Демонстрация экрана отменена или доступ запрещён.'
+        : shareError.message || 'Не удалось начать демонстрацию экрана.');
     }
   }
 
-  function toggleMic() {
-    const stream = localStreamRef.current;
-    if (!stream || !connected) return;
-    // Change the actual MediaStreamTrack synchronously; never wait for Realtime.
-    const tracks = stream.getAudioTracks();
-    if (!tracks.length) {
-      setVoiceError('Микрофон не найден. Выйди и подключись к комнате снова.');
-      return;
-    }
-    const next = !micEnabledRef.current;
-    micEnabledRef.current = next;
-    tracks.forEach(track => { track.enabled = next; });
-    setMicEnabled(next);
-    setParticipants(current => current.map(p => p.local ? { ...p, muted: !next } : p));
-    setVoiceStatus(next ? 'Микрофон включён' : 'Микрофон выключен');
-    // Presence is only a status update. A slow network must not delay mute/unmute.
-    const channel = voiceChannelRef.current;
-    if (channel) {
-      channel.track({ userId: session.user.id, name: voiceName.trim(), muted: !next, joinedAt: new Date().toISOString() })
-        .then(() => updateVoiceParticipants())
-        .catch(err => console.warn('KENTY mic status sync:', err));
+  async function toggleMic() {
+    const room = liveKitRoomRef.current;
+    if (!room || !connected) return;
+    const next = !micEnabled;
+    try {
+      await room.localParticipant.setMicrophoneEnabled(next, {
+        echoCancellation: true,
+        noiseSuppression: noiseSuppressionRef.current,
+        autoGainControl: true,
+        channelCount: 1
+      });
+      setMicEnabled(next);
+      setVoiceError('');
+      setVoiceStatus(next ? 'Микрофон включён' : 'Микрофон выключен');
+      updateVoiceParticipants();
+    } catch (micError) {
+      setVoiceError(micError.message || 'Не удалось изменить состояние микрофона.');
     }
   }
 
   useEffect(() => () => {
-    voiceChannelRef.current && supabase.removeChannel(voiceChannelRef.current);
-    peerConnectionsRef.current.forEach(pc => pc.close());
-    localStreamRef.current?.getTracks().forEach(track => track.stop());
+    const room = liveKitRoomRef.current;
+    liveKitRoomRef.current = null;
+    if (room) room.disconnect().catch(() => {});
+    audioElementsRef.current.forEach(element => {
+      element.pause?.();
+      element.srcObject = null;
+      element.remove();
+    });
+    audioElementsRef.current.clear();
   }, []);
 
   if (!session) return (
