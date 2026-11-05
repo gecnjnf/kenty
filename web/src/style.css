@@ -1763,3 +1763,19 @@ body, .app-shell { background: #09090d; }
   .server-member-row b { max-width:65px;font-size:8px; }
   .server-member-row small { font-size:7px; }
 }
+
+.server-member-meta { min-width:0;flex:1; }
+.server-role-select {
+  max-width:94px;min-width:0;padding:5px 5px;border:1px solid rgba(255,135,103,.2);
+  border-radius:7px;background:#252127;color:#d8c9c6;font-size:8px;
+}
+.server-kick-button {
+  width:22px;height:22px;flex:none;border:0;border-radius:6px;
+  background:rgba(255,80,68,.1);color:#ff8b7d;font-size:16px;line-height:1;
+}
+.server-kick-button:hover { background:rgba(255,80,68,.22); }
+:root[data-theme="light"] .server-role-select { background:#fff;color:#5c4b4b;border-color:#efd0c5; }
+@media(max-width:640px) {
+  .server-role-select { max-width:75px;padding:4px 2px;font-size:7px; }
+  .server-kick-button { width:20px;height:20px; }
+}
