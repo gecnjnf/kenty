@@ -473,7 +473,9 @@ export default function App() {
         .select('code')
         .single();
       if (inviteError) throw inviteError;
-      const inviteUrl = window.location.origin + '/?invite=' + encodeURIComponent(data.code);
+      const inviteUrlObject = new URL(import.meta.env.BASE_URL, window.location.origin);
+      inviteUrlObject.searchParams.set('invite', data.code);
+      const inviteUrl = inviteUrlObject.toString();
       try {
         await navigator.clipboard.writeText(inviteUrl);
         setNotice('Ссылка-приглашение скопирована: ' + inviteUrl);
@@ -1096,7 +1098,7 @@ export default function App() {
       if (!accessToken) throw new Error('Сессия закончилась. Войди в KENTY заново.');
 
       const roomName = activeServerVoice ? 'server:' + activeServerVoice.serverId + ':' + activeServerVoice.channelId : (activeVoiceOwner?.id || session.user.id) + ':' + selectedRoom.id;
-      const tokenResponse = await fetch('/api/token', {
+      const tokenResponse = await fetch(import.meta.env.VITE_TOKEN_ENDPOINT || '/api/token', {
         method: 'POST',
         cache: 'no-store',
         headers: {
