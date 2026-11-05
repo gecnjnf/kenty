@@ -1517,3 +1517,12 @@ body, .app-shell { background: #09090d; }
   .main-panel::before { opacity: .72; }
   .main-panel::after { width: 105vw; right: -55%; top: 14%; }
 }
+
+/* Live camera tiles inside voice rooms */
+.voice-video-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:12px;margin:4px 0 22px}
+.voice-video-tile{position:relative;min-width:0;aspect-ratio:16/10;overflow:hidden;border:1px solid rgba(255,104,73,.32);border-radius:15px;background:radial-gradient(ellipse at 50% 25%,#302026,#09090d 75%);box-shadow:0 12px 32px rgba(0,0,0,.28),0 0 24px rgba(255,65,42,.08)}
+.voice-video-tile video{display:block;width:100%;height:100%;object-fit:cover}
+.voice-video-tile>span{position:absolute;left:10px;bottom:10px;max-width:calc(100% - 20px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:6px 9px;border:1px solid rgba(255,255,255,.12);border-radius:8px;background:rgba(8,8,12,.72);color:#fff;font-size:10px;backdrop-filter:blur(10px)}
+.voice-camera-button.camera-live-active{color:#fff0e9;border-color:#ff654b;background:linear-gradient(120deg,rgba(255,58,43,.28),rgba(255,119,24,.18));box-shadow:0 0 0 1px rgba(255,90,57,.12),0 6px 20px rgba(255,65,42,.12)}
+@media(max-width:640px){.voice-video-grid{grid-template-columns:repeat(auto-fit,minmax(min(100%,145px),1fr));gap:8px;margin-bottom:16px}.voice-video-tile{aspect-ratio:4/3;border-radius:12px}}
+:root[data-theme="light"] .voice-video-tile{background:linear-gradient(145deg,#f6e9e4,#fff8f5);border-color:rgba(220,84,56,.28)}
