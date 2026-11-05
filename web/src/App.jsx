@@ -1376,7 +1376,7 @@ export default function App() {
         <button className={'nav-item ' + (tab === 'voice' ? 'selected' : '')} onClick={() => setTab('voice')}>◖ Голосовые комнаты</button>
         <button className={'nav-item ' + (tab === 'settings' ? 'selected' : '')} onClick={() => setTab('settings')}>⚙ Настройки</button>
         <div className="sidebar-label">СЕРВЕРЫ</div>
-        <button className="nav-item" onClick={() => setShowServerCreate(value => !value)}>＋ Создать сервер</button>
+        <button className="nav-item server-create-nav" onClick={() => setShowServerCreate(value => !value)}>＋ Создать сервер</button>
         {showServerCreate && <form className="sidebar-create-form" onSubmit={createServer}><input value={serverNameDraft} onChange={event => setServerNameDraft(event.target.value)} maxLength={64} placeholder="Название сервера" required /><button disabled={serverBusy}>{serverBusy ? 'Создаём…' : 'Создать'}</button></form>}
         <form className="sidebar-join-form" onSubmit={joinServerWithCode}><input value={inviteCodeDraft} onChange={event => setInviteCodeDraft(event.target.value)} placeholder="Код приглашения" aria-label="Код приглашения" /><button disabled={serverBusy || !inviteCodeDraft.trim()}>Войти</button></form>
         {selectedServerId && <><div className="sidebar-label channel-sidebar-label">КАНАЛЫ</div>
