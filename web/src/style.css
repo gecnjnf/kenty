@@ -1458,3 +1458,62 @@ body, .app-shell { background: #09090d; }
     repeating-linear-gradient(132deg, transparent 0 94px, rgba(220, 84, 56, .035) 95px, transparent 97px 190px);
 }
 :root[data-theme="light"] .main-panel::after { border-color: rgba(220, 84, 56, .10); }
+
+
+/* KENTY depth pass: richer cinematic background, visible on desktop and mobile */
+.main-panel {
+  background:
+    radial-gradient(ellipse at 74% 34%, rgba(255, 54, 36, .19), transparent 37%),
+    radial-gradient(ellipse at 8% 88%, rgba(255, 111, 32, .12), transparent 34%),
+    radial-gradient(ellipse at 48% -18%, rgba(120, 35, 48, .18), transparent 48%),
+    linear-gradient(135deg, #0b090d 0%, #151015 48%, #0a0a0f 100%);
+}
+.main-panel::before {
+  opacity: .95;
+  background-image:
+    linear-gradient(rgba(255, 120, 82, .055) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 120, 82, .055) 1px, transparent 1px),
+    repeating-linear-gradient(128deg, transparent 0 58px, rgba(255, 75, 49, .075) 59px, transparent 61px 116px),
+    repeating-linear-gradient(0deg, transparent 0 145px, rgba(255, 139, 73, .035) 146px, transparent 148px 290px),
+    radial-gradient(circle at 78% 24%, rgba(255, 102, 65, .55) 0 1px, transparent 3px),
+    radial-gradient(circle at 22% 72%, rgba(255, 145, 71, .38) 0 1px, transparent 3px),
+    radial-gradient(ellipse at 80% 35%, transparent 0 18%, rgba(255, 74, 48, .10) 18.2%, transparent 18.6% 25%, rgba(255, 74, 48, .07) 25.2%, transparent 25.6%);
+  background-size: 38px 38px, 38px 38px, 100% 100%, 100% 100%, 100% 100%, 100% 100%, 100% 100%;
+  mask-image: linear-gradient(90deg, rgba(0,0,0,.45), #000 12%, #000 100%);
+}
+.main-panel::after {
+  width: min(58vw, 760px);
+  right: -17%;
+  top: 7%;
+  border: 1px solid rgba(255, 92, 59, .17);
+  box-shadow:
+    0 0 0 18px rgba(255, 91, 58, .035),
+    0 0 0 42px rgba(255, 91, 58, .027),
+    0 0 0 78px rgba(255, 91, 58, .019),
+    0 0 0 126px rgba(255, 91, 58, .012),
+    inset 0 0 90px rgba(255, 66, 40, .055),
+    0 0 120px rgba(255, 66, 40, .12);
+  opacity: 1;
+}
+:root[data-theme="light"] .main-panel {
+  background:
+    radial-gradient(ellipse at 74% 34%, rgba(255, 75, 48, .13), transparent 37%),
+    radial-gradient(ellipse at 8% 88%, rgba(255, 145, 68, .10), transparent 34%),
+    linear-gradient(135deg, #fffaf8 0%, #fff1eb 48%, #fffaf8 100%);
+}
+:root[data-theme="light"] .main-panel::before {
+  opacity: .7;
+  background-image:
+    linear-gradient(rgba(184, 70, 48, .065) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(184, 70, 48, .065) 1px, transparent 1px),
+    repeating-linear-gradient(128deg, transparent 0 58px, rgba(220, 84, 56, .06) 59px, transparent 61px 116px),
+    radial-gradient(ellipse at 80% 35%, transparent 0 18%, rgba(220, 84, 56, .08) 18.2%, transparent 18.6% 25%, rgba(220, 84, 56, .06) 25.2%, transparent 25.6%);
+}
+:root[data-theme="light"] .main-panel::after {
+  border-color: rgba(220, 84, 56, .16);
+  box-shadow: 0 0 0 18px rgba(220, 84, 56, .025), 0 0 0 42px rgba(220, 84, 56, .02), 0 0 0 78px rgba(220, 84, 56, .014);
+}
+@media (max-width: 640px) {
+  .main-panel::before { opacity: .72; }
+  .main-panel::after { width: 105vw; right: -55%; top: 14%; }
+}
