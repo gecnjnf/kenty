@@ -731,8 +731,12 @@ export default function App() {
     pc.ontrack = event => {
       if (event.track.kind === 'video') {
         const videoStream = event.streams[0] || new MediaStream([event.track]);
-        setRemoteVideoStreams(current => ({ ...current, [remoteId]: videoStream }));
-        event.track.onended = () => setRemoteVideoStreams(current => { const next = { ...current }; delete next[remoteId]; return next; });
+        const showRemoteVideo = () => setRemoteVideoStreams(current => ({ ...current, [remoteId]: videoStream }));
+        const hideRemoteVideo = () => setRemoteVideoStreams(current => { const next = { ...current }; delete next[remoteId]; return next; });
+        event.track.onunmute = showRemoteVideo;
+        event.track.onmute = hideRemoteVideo;
+        event.track.onended = hideRemoteVideo;
+        if (!event.track.muted) showRemoteVideo();
         return;
       }
       let audio = audioElementsRef.current.get(remoteId);
