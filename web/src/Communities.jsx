@@ -1,14 +1,11 @@
 import { useEffect, useState } from 'react';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_ANON_KEY);
 
 function formatTime(value) {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? '' : new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit' }).format(date);
 }
 
-export default function Communities({ session, onNotice, onError }) {
+export default function Communities({ session, supabase, onNotice, onError }) {
   const userId = session?.user?.id;
   const [servers, setServers] = useState([]);
   const [serverId, setServerId] = useState('');
