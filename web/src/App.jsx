@@ -821,7 +821,7 @@ export default function App() {
         .on(liveKitSdk.RoomEvent.ActiveSpeakersChanged, updateVoiceParticipants)
         .on(liveKitSdk.RoomEvent.LocalTrackUnpublished, publication => {
           if (publication.source === liveKitSdk.Track.Source.Camera) setCameraEnabled(false);
-          if (publication.source === Track.Source.ScreenShare) setScreenSharing(false);
+          if (publication.source === liveKitSdk.Track.Source.ScreenShare) setScreenSharing(false);
           updateVoiceParticipants();
         })
         .on(liveKitSdk.RoomEvent.ConnectionStateChanged, state => {
