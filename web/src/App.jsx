@@ -103,6 +103,8 @@ export default function App() {
   const audioElementsRef = useRef(new Map());
   const audioRef = useRef(null);
   const participantNamesRef = useRef(new Map());
+  const voiceAudioContextRef = useRef(null);
+  const voiceRoomReadyRef = useRef(false);
 
   useEffect(() => {
     const onInstallAvailable = (event) => { event.preventDefault(); setInstallPrompt(event); };
@@ -718,6 +720,36 @@ export default function App() {
   const voiceOwners = [{ id: session?.user?.id, label: 'Моя комната' }, ...friends.map(f => ({ id: f.person?.id, label: f.person?.display_name || f.person?.username || 'Друг' })).filter(x => x.id)];
   const activeVoiceOwner = voiceOwners.find(x => x.id === selectedVoiceOwnerId) || voiceOwners[0];
 
+  function playVoiceChime(kind) {
+    try {
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContextClass) return;
+      const context = voiceAudioContextRef.current || new AudioContextClass();
+      voiceAudioContextRef.current = context;
+      const play = () => {
+        const now = context.currentTime;
+        const notes = kind === 'join' ? [660, 880] : [660, 440];
+        notes.forEach((frequency, index) => {
+          const oscillator = context.createOscillator();
+          const gain = context.createGain();
+          oscillator.type = 'sine';
+          oscillator.frequency.setValueAtTime(frequency, now + index * 0.13);
+          gain.gain.setValueAtTime(0.0001, now + index * 0.13);
+          gain.gain.exponentialRampToValueAtTime(0.12, now + index * 0.13 + 0.025);
+          gain.gain.exponentialRampToValueAtTime(0.0001, now + index * 0.13 + 0.19);
+          oscillator.connect(gain);
+          gain.connect(context.destination);
+          oscillator.start(now + index * 0.13);
+          oscillator.stop(now + index * 0.13 + 0.2);
+        });
+      };
+      if (context.state === 'suspended') context.resume().then(play).catch(() => {});
+      else play();
+    } catch (chimeError) {
+      console.warn('KENTY voice chime unavailable:', chimeError);
+    }
+  }
+
   function updateVoiceParticipants() {
     const room = liveKitRoomRef.current;
     if (!room) return;
@@ -844,8 +876,12 @@ export default function App() {
           handleLiveKitTrackUnsubscribed(track, publication, participant);
           updateVoiceParticipants();
         })
-        .on(liveKitSdk.RoomEvent.ParticipantConnected, updateVoiceParticipants)
+        .on(liveKitSdk.RoomEvent.ParticipantConnected, participant => {
+          updateVoiceParticipants();
+          if (voiceRoomReadyRef.current) playVoiceChime('join');
+        })
         .on(liveKitSdk.RoomEvent.ParticipantDisconnected, participant => {
+          if (voiceRoomReadyRef.current) playVoiceChime('leave');
           setRemoteVideoStreams(current => {
             const next = { ...current };
             delete next[participant.identity];
@@ -884,6 +920,7 @@ export default function App() {
           updateVoiceParticipants();
         })
         .on(liveKitSdk.RoomEvent.Disconnected, () => {
+          voiceRoomReadyRef.current = false;
           setConnected(false);
           setMicEnabled(false);
           setCameraEnabled(false);
@@ -908,6 +945,7 @@ export default function App() {
         channelCount: 1
       });
       await room.startAudio().catch(() => {});
+      voiceRoomReadyRef.current = true;
 
       setConnected(true);
       setMicEnabled(true);
@@ -943,6 +981,7 @@ export default function App() {
   }
 
   async function leaveVoiceRoom() {
+    voiceRoomReadyRef.current = false;
     const room = liveKitRoomRef.current;
     liveKitRoomRef.current = null;
     if (room) {
@@ -1063,10 +1102,15 @@ export default function App() {
       return;
     }
     try {
-      await room.localParticipant.setScreenShareEnabled(true);
+      await room.localParticipant.setScreenShareEnabled(true, {
+        audio: true,
+        systemAudio: 'include',
+        selfBrowserSurface: 'include',
+        surfaceSwitching: 'include'
+      });
       setScreenSharing(true);
       setVoiceError('');
-      setVoiceStatus('Ты показываешь экран участникам комнаты');
+      setVoiceStatus('Экран транслируется. Для звука выбери вкладку браузера и включи «Поделиться звуком вкладки».');
     } catch (shareError) {
       setVoiceError(shareError.name === 'NotAllowedError' || shareError.name === 'AbortError'
         ? 'Демонстрация экрана отменена или доступ запрещён.'
