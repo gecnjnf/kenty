@@ -1779,3 +1779,34 @@ body, .app-shell { background: #09090d; }
   .server-role-select { max-width:75px;padding:4px 2px;font-size:7px; }
   .server-kick-button { width:20px;height:20px; }
 }
+
+
+.server-voice-channel-card {
+  flex:1;min-height:260px;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:28px;text-align:center;border:1px solid rgba(255,129,93,.2);border-radius:18px;
+  background:radial-gradient(ellipse at 50% 25%,rgba(255,105,73,.14),transparent 55%),linear-gradient(145deg,#252027,#191b23);
+}
+.server-voice-orb {
+  width:76px;height:76px;display:grid;place-items:center;margin-bottom:16px;border-radius:25px;
+  background:linear-gradient(145deg,#ff8758,#bd4036);color:white;font-size:34px;
+  box-shadow:0 15px 38px rgba(236,79,52,.23);
+}
+.server-voice-channel-card h2 { margin:8px 0;color:#fff;font-size:24px; }
+.server-voice-channel-card p { max-width:400px;margin:0 0 19px;color:#a6a0a5;font-size:12px;line-height:1.7; }
+.server-voice-channel-card .primary-button { min-height:44px;padding:0 20px; }
+.sidebar-create-form select,.server-inline-form select {
+  min-width:80px;padding:0 7px;border:1px solid rgba(255,255,255,.1);border-radius:8px;
+  background:#171920;color:#e9deda;font-size:10px;
+}
+.channel-inline-form select { min-height:42px; }
+:root[data-theme="light"] .server-voice-channel-card { background:linear-gradient(145deg,#fff7f3,#fff);border-color:#efc6b8; }
+:root[data-theme="light"] .server-voice-channel-card h2 { color:#30282b; }
+:root[data-theme="light"] .server-voice-channel-card p { color:#6e666b; }
+:root[data-theme="light"] .sidebar-create-form select,:root[data-theme="light"] .server-inline-form select { background:#fff;color:#342a2d;border-color:#e6c6bc; }
+@media(max-width:640px) {
+  .server-voice-channel-card { min-height:230px;padding:18px 12px; }
+  .server-voice-channel-card h2 { font-size:21px; }
+  .server-voice-channel-card p { font-size:11px; }
+  .sidebar-create-form select { display:none; }
+  .channel-inline-form select { min-width:82px;max-width:90px;font-size:9px; }
+}
