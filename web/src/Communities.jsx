@@ -149,15 +149,21 @@ export default function Communities({ session, onNotice, onError }) {
     }
     setBusy(true);
     try {
+      // Resolve the user from the active Supabase JWT, rather than trusting
+      // a possibly stale React session prop when enforcing the owner RLS check.
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+      if (authError) throw authError;
+      const ownerId = authData?.user?.id;
+      if (!ownerId) throw new Error('Сессия истекла. Выйди из KENTY и войди снова.');
       const { data: created, error: createError } = await supabase.from('servers')
-        .insert({ name, description: serverDescription.trim().slice(0, 240), owner_id: userId })
+        .insert({ name, description: serverDescription.trim().slice(0, 240), owner_id: ownerId })
         .select('id').single();
       if (createError) throw createError;
       const { error: memberError } = await supabase.from('server_members')
-        .insert({ server_id: created.id, user_id: userId, role: 'owner' });
+        .insert({ server_id: created.id, user_id: ownerId, role: 'owner' });
       if (memberError) throw memberError;
       const { error: channelError } = await supabase.from('channels')
-        .insert({ server_id: created.id, name: 'общий', channel_type: 'text', created_by: userId, position: 0 });
+        .insert({ server_id: created.id, name: 'общий', channel_type: 'text', created_by: ownerId, position: 0 });
       if (channelError) throw channelError;
       setServerName('');
       setServerDescription('');
