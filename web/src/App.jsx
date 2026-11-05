@@ -1,6 +1,6 @@
 import { Suspense, lazy, useEffect, useRef, useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
-import { formatMessageTime, getImagePath, VOICE_ROOMS } from './lib/chatUtils.js';
+import { formatMessageTime, getImagePath, IMAGE_MESSAGE_PREFIX, VOICE_ROOMS } from './lib/chatUtils.js';
 
 const Communities = lazy(() => import('./Communities.jsx'));
 
