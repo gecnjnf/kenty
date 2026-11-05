@@ -1611,3 +1611,11 @@ body, .app-shell { background: #09090d; }
 .message-edit-form button[type="submit"]{background:linear-gradient(120deg,#7764e8,#3b9eae);color:white;padding:7px 10px}
 :root[data-theme="light"] .message-edit-form textarea{background:#fff;color:#29253b;border-color:#b9afe4}
 :root[data-theme="light"] .message-actions button{color:#6b5aa7}
+
+
+/* KENTY 4.0 — network status indicator */
+.network-pill{display:inline-flex;align-items:center;gap:7px;white-space:nowrap;padding:7px 10px;border:1px solid rgba(120,130,150,.2);border-radius:999px;font-size:9px;font-weight:700;color:var(--muted,#a9a6bd);background:rgba(120,130,150,.07)}
+.network-pill i{width:7px;height:7px;flex:none;border-radius:50%;background:#35c98a;box-shadow:0 0 9px rgba(53,201,138,.45)}
+.network-pill.network-offline{color:#ffb4a8;border-color:rgba(255,100,80,.35);background:rgba(255,80,60,.09)}
+.network-pill.network-offline i{background:#ff6655;box-shadow:0 0 9px rgba(255,102,85,.45)}
+@media(max-width:640px){.network-pill{font-size:8px;padding:6px 8px}.topbar-right{gap:6px;flex-wrap:wrap;justify-content:flex-end}}
