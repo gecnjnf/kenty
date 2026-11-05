@@ -1279,7 +1279,7 @@ export default function App() {
         {error && <div className="global-error">{error}<button onClick={() => setError('')}>×</button></div>}
         {notice && <div className="global-notice">{notice}<button onClick={() => setNotice('')}>×</button></div>}
 
-        {tab === 'servers' && <Suspense fallback={<div className="community-loading">Загружаем сообщества…</div>}><Communities session={session} onNotice={setNotice} onError={setError} /></Suspense>}
+        {tab === 'servers' && <Suspense fallback={<div className="community-loading">Загружаем сообщества…</div>}><Communities session={session} supabase={supabase} onNotice={setNotice} onError={setError} /></Suspense>}
 
         {tab === 'friends' && <div className="social-content">
           <section className="friends-hero">
