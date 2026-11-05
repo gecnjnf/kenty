@@ -1,0 +1,103 @@
+name: Build KENTY installers
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "package.json"
+      - "web/**"
+      - "desktop/**"
+      - "scripts/**"
+      - ".github/workflows/build-installers.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kenty-installers-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  windows:
+    name: Windows installer
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm install
+      - name: Build web app
+        run: npm run build --workspace web
+      - name: Generate desktop icons
+        run: npm run icon:generate
+      - name: Build Windows installer
+        run: npx electron-builder --win nsis --x64 --publish never
+      - uses: actions/upload-artifact@v4
+        with:
+          name: KENTY-Windows
+          path: release/*.exe
+          if-no-files-found: error
+          retention-days: 14
+
+  android:
+    name: Android APK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: android-actions/setup-android@v3
+      - name: Install dependencies
+        run: npm install
+      - name: Build web app
+        run: npm run build --workspace web
+      - name: Generate Android project
+        working-directory: web
+        run: npx cap add android
+      - name: Sync Capacitor
+        working-directory: web
+        run: npx cap sync android
+      - name: Build debug APK for direct testing
+        working-directory: web/android
+        run: ./gradlew assembleDebug
+      - uses: actions/upload-artifact@v4
+        with:
+          name: KENTY-Android-APK
+          path: web/android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 14
+
+  ios-project:
+    name: iOS Xcode project
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm install
+      - name: Build web app
+        run: npm run build --workspace web
+      - name: Generate iOS project
+        working-directory: web
+        run: npx cap add ios
+      - name: Sync Capacitor
+        working-directory: web
+        run: npx cap sync ios
+      - name: Package Xcode project
+        run: ditto -c -k --sequesterRsrc --keepParent web/ios KENTY-iOS-Xcode.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: KENTY-iOS-Xcode
+          path: KENTY-iOS-Xcode.zip
+          if-no-files-found: error
+          retention-days: 14
