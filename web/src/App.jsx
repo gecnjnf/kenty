@@ -42,6 +42,7 @@ export default function App() {
   const [servers, setServers] = useState([]);
   const [selectedServerId, setSelectedServerId] = useState('');
   const [serverChannels, setServerChannels] = useState([]);
+  const [serverMembers, setServerMembers] = useState([]);
   const [selectedChannelId, setSelectedChannelId] = useState('');
   const [channelMessages, setChannelMessages] = useState([]);
   const [channelMessage, setChannelMessage] = useState('');
@@ -555,6 +556,22 @@ export default function App() {
       if (loadError) { setError('Не удалось загрузить каналы: ' + loadError.message); return; }
       setServerChannels(data || []);
       setSelectedChannelId(current => (data || []).some(channel => channel.id === current) ? current : (data?.[0]?.id || ''));
+    })();
+    return () => { active = false; };
+  }, [selectedServerId]);
+
+  useEffect(() => {
+    const serverId = selectedServerId;
+    if (!serverId) { setServerMembers([]); return undefined; }
+    let active = true;
+    (async () => {
+      const { data, error: memberError } = await supabase.from('server_members')
+        .select('user_id,role,profile:profiles(id,username,display_name,avatar_url)')
+        .eq('server_id', serverId)
+        .order('joined_at', { ascending: true });
+      if (!active) return;
+      if (memberError) { setError('Не удалось загрузить участников: ' + memberError.message); return; }
+      setServerMembers((data || []).map(row => ({ ...row.profile, role: row.role, user_id: row.user_id })));
     })();
     return () => { active = false; };
   }, [selectedServerId]);
@@ -1452,10 +1469,19 @@ export default function App() {
           {!servers.some(item => item.id === selectedServerId) ? <div className="server-empty-card"><span className="server-empty-icon">K</span><h2>Твоё сообщество начинается здесь</h2><p>Создай сервер для друзей или присоединись по приглашению.</p><button type="button" className="primary-button" onClick={() => setShowServerCreate(value => !value)}>＋ Создать сервер</button>{showServerCreate && <form className="server-inline-form" onSubmit={createServer}><input value={serverNameDraft} onChange={event => setServerNameDraft(event.target.value)} maxLength={64} placeholder="Название сервера" required /><button disabled={serverBusy}>{serverBusy ? 'Создаём…' : 'Создать'}</button></form>}<form className="server-inline-form" onSubmit={joinServerWithCode}><input value={inviteCodeDraft} onChange={event => setInviteCodeDraft(event.target.value)} placeholder="Вставь код приглашения" aria-label="Код приглашения" /><button disabled={serverBusy || !inviteCodeDraft.trim()}>Войти</button></form></div> : <>
             <section className="server-welcome"><div className="server-welcome-copy"><span className="eyebrow">KENTY COMMUNITY</span><h1>{servers.find(item => item.id === selectedServerId)?.name}</h1><p>{servers.find(item => item.id === selectedServerId)?.description || 'Общайся, собирай друзей и создавай своё пространство.'}</p><select className="mobile-server-select" value={selectedServerId} onChange={event => { setSelectedServerId(event.target.value); setTab('server'); }} aria-label="Выбрать сервер">{servers.map(server => <option key={server.id} value={server.id}>{server.name}</option>)}</select></div><div className="server-header-actions"><button type="button" className="primary-button" onClick={createServerInvite} disabled={serverBusy}>Пригласить друзей ↗</button>{['owner','admin','moderator'].includes(servers.find(item => item.id === selectedServerId)?.role) && <button type="button" className="server-secondary-button" onClick={() => setShowChannelCreate(value => !value)}>＋ Канал</button>}</div></section>
             {showChannelCreate && <form className="server-inline-form channel-inline-form" onSubmit={createServerChannel}><input value={channelNameDraft} onChange={event => setChannelNameDraft(event.target.value)} maxLength={64} placeholder="Название нового канала" required /><button disabled={serverBusy}>Создать канал</button></form>}
-            {!selectedChannelId ? <div className="empty-state">Создай первый текстовый канал в боковой панели.</div> : <><div className="server-channel-heading"><span>#</span><div><b>{serverChannels.find(channel => channel.id === selectedChannelId)?.name || 'канал'}</b><small>{serverChannels.find(channel => channel.id === selectedChannelId)?.topic || 'Общение участников сервера'}</small></div><select className="mobile-channel-select" value={selectedChannelId} onChange={event => setSelectedChannelId(event.target.value)} aria-label="Выбрать канал">{serverChannels.map(channel => <option key={channel.id} value={channel.id}># {channel.name}</option>)}</select></div>
-              <div className="server-channel-messages">{channelMessages.map(item => <article className="server-chat-message" key={item.id}><div className="message-avatar">{item.sender_id === session.user.id ? (profile?.display_name || profile?.username || 'Я')[0].toUpperCase() : 'У'}</div><div><b>{item.sender_id === session.user.id ? 'Ты' : 'Участник'}</b><time>{formatMessageTime(item.created_at)}</time><p>{item.content}</p></div></article>)}{!channelMessages.length && <p className="chat-no-messages">Канал создан. Напиши первое сообщение 👋</p>}</div>
-              <form className="chat-composer server-chat-composer" onSubmit={sendChannelMessage}><input value={channelMessage} onChange={event => setChannelMessage(event.target.value)} placeholder={'Написать в #' + (serverChannels.find(channel => channel.id === selectedChannelId)?.name || 'канал') + '…'} /><button type="submit">Отправить</button></form>
-            </>}
+            {!selectedChannelId ? <div className="empty-state">Создай первый текстовый канал в боковой панели.</div> : <div className="server-channel-layout">
+              <div className="server-channel-main">
+                <div className="server-channel-heading"><span>#</span><div><b>{serverChannels.find(channel => channel.id === selectedChannelId)?.name || 'канал'}</b><small>{serverChannels.find(channel => channel.id === selectedChannelId)?.topic || 'Общение участников сервера'}</small></div><select className="mobile-channel-select" value={selectedChannelId} onChange={event => setSelectedChannelId(event.target.value)} aria-label="Выбрать канал">{serverChannels.map(channel => <option key={channel.id} value={channel.id}># {channel.name}</option>)}</select></div>
+                <div className="server-channel-messages">{channelMessages.map(item => {
+                  const sender = serverMembers.find(member => member.user_id === item.sender_id);
+                  return <article className="server-chat-message" key={item.id}><div className="message-avatar">{sender?.avatar_url ? <img src={sender.avatar_url} alt="" /> : (sender?.display_name || sender?.username || (item.sender_id === session.user.id ? profile?.username : 'У'))[0].toUpperCase()}</div><div><b>{item.sender_id === session.user.id ? 'Ты' : sender?.display_name || sender?.username || 'Участник'}</b><time>{formatMessageTime(item.created_at)}{item.edited_at ? ' · изменено' : ''}</time><p>{item.content}</p></div></article>;
+                })}{!channelMessages.length && <p className="chat-no-messages">Канал создан. Напиши первое сообщение 👋</p>}</div>
+                <form className="chat-composer server-chat-composer" onSubmit={sendChannelMessage}><input value={channelMessage} onChange={event => setChannelMessage(event.target.value)} placeholder={'Написать в #' + (serverChannels.find(channel => channel.id === selectedChannelId)?.name || 'канал') + '…'} /><button type="submit">Отправить</button></form>
+              </div>
+              <aside className="server-member-panel"><div className="server-member-heading">УЧАСТНИКИ <span>{serverMembers.length}</span></div>
+                {serverMembers.map(member => <div className="server-member-row" key={member.user_id}><div className="server-member-avatar">{member.avatar_url ? <img src={member.avatar_url} alt="" /> : (member.display_name || member.username || '?')[0].toUpperCase()}<i className={onlineUserIds.has(member.user_id) ? 'online' : ''} /></div><div><b>{member.display_name || member.username}</b><small>{member.role === 'owner' ? 'Владелец' : member.role === 'admin' ? 'Администратор' : member.role === 'moderator' ? 'Модератор' : 'Участник'}</small></div></div>)}
+              </aside>
+            </div>}
           </>}
         </div>}
 
