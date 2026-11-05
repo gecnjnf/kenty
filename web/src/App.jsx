@@ -40,7 +40,7 @@ export default function App() {
   const [error, setError] = useState('');
   const [tab, setTab] = useState('friends');
   const [theme, setTheme] = useState(() => localStorage.getItem('kenty-theme') || 'dark');
-  const [accentTheme, setAccentTheme] = useState(() => localStorage.getItem('kenty-accent') || 'violet');
+  const [accentTheme, setAccentTheme] = useState(() => localStorage.getItem('kenty-accent') || 'ember');
   const [avatarBusy, setAvatarBusy] = useState(false);
   const [search, setSearch] = useState('');
   const [searchResults, setSearchResults] = useState([]);
@@ -56,6 +56,9 @@ export default function App() {
   const activeConversationIdRef = useRef(null);
   const messageLoadRequestRef = useRef(0);
   const [message, setMessage] = useState('');
+  const [editingMessageId, setEditingMessageId] = useState(null);
+  const [editDraft, setEditDraft] = useState('');
+  const [messageActionBusy, setMessageActionBusy] = useState(false);
   const [busy, setBusy] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [cameraFacing, setCameraFacing] = useState('environment');
@@ -425,6 +428,18 @@ export default function App() {
             .slice(-100);
         });
       })
+      .on('postgres_changes', {
+        event: 'UPDATE', schema: 'public', table: 'messages', filter: 'conversation_id=eq.' + conversationId
+      }, ({ new: updated }) => {
+        if (!active || activeConversationIdRef.current !== conversationId || !updated?.id) return;
+        setMessages(current => current.map(item => item.id === updated.id ? updated : item));
+      })
+      .on('postgres_changes', {
+        event: 'DELETE', schema: 'public', table: 'messages', filter: 'conversation_id=eq.' + conversationId
+      }, ({ old: removed }) => {
+        if (!active || activeConversationIdRef.current !== conversationId || !removed?.id) return;
+        setMessages(current => current.filter(item => item.id !== removed.id));
+      })
       .subscribe(status => {
         if (active && status === 'SUBSCRIBED') loadMessages(conversationId);
         if (active && status === 'CHANNEL_ERROR') {
@@ -540,7 +555,7 @@ export default function App() {
   async function loadMessages(id) {
     const requestId = ++messageLoadRequestRef.current;
     const { data, error: err } = await supabase.from('messages')
-      .select('id,sender_id,content,created_at')
+      .select('id,sender_id,content,created_at,edited_at')
       .eq('conversation_id', id)
       .order('created_at', { ascending: false })
       .limit(100);
@@ -625,7 +640,7 @@ export default function App() {
         conversation_id: conversationId,
         sender_id: session.user.id,
         content: IMAGE_MESSAGE_PREFIX + path
-      }).select('id,sender_id,content,created_at').single();
+      }).select('id,sender_id,content,created_at,edited_at').single();
       if (messageError) {
         await supabase.storage.from('chat-media').remove([path]);
         throw messageError;
@@ -669,6 +684,44 @@ export default function App() {
         });
       }
     }
+  }
+
+  function beginEditMessage(item) {
+    if (item.sender_id !== session?.user?.id || getImagePath(item.content)) return;
+    setEditingMessageId(item.id);
+    setEditDraft(item.content);
+  }
+
+  async function saveEditedMessage(item) {
+    const nextContent = editDraft.trim();
+    if (!nextContent || nextContent.length > 10000 || messageActionBusy) return;
+    setMessageActionBusy(true);
+    const { data, error: updateError } = await supabase.from('messages')
+      .update({ content: nextContent, edited_at: new Date().toISOString() })
+      .eq('id', item.id)
+      .eq('sender_id', session.user.id)
+      .select('id,sender_id,content,created_at,edited_at')
+      .single();
+    if (updateError) setError('Не удалось изменить сообщение: ' + updateError.message);
+    else {
+      setMessages(current => current.map(messageItem => messageItem.id === item.id ? data : messageItem));
+      setEditingMessageId(null);
+      setEditDraft('');
+    }
+    setMessageActionBusy(false);
+  }
+
+  async function deleteMessage(item) {
+    if (item.sender_id !== session?.user?.id || messageActionBusy) return;
+    if (!window.confirm('Удалить это сообщение?')) return;
+    setMessageActionBusy(true);
+    const { error: deleteError } = await supabase.from('messages').delete().eq('id', item.id).eq('sender_id', session.user.id);
+    if (deleteError) setError('Не удалось удалить сообщение: ' + deleteError.message);
+    else {
+      setMessages(current => current.filter(messageItem => messageItem.id !== item.id));
+      if (editingMessageId === item.id) setEditingMessageId(null);
+    }
+    setMessageActionBusy(false);
   }
 
   function personForFriendship(f) { return f.person || { username: 'Пользователь', display_name: 'Пользователь' }; }
@@ -1162,7 +1215,18 @@ export default function App() {
         {tab === 'chat' && <div className="chat-content">
           {!selectedConversation ? <div className="empty-state chat-empty"><h2>Твои сообщения</h2><p>Добавь друга и нажми «Написать», чтобы начать личную переписку.</p></div> : <>
             <div className="chat-welcome"><div className="chat-welcome-icon">#</div><h1>{selectedConversation.person?.display_name || selectedConversation.person?.username}</h1><p>Личная переписка KENTY</p></div>
-            <div className="chat-messages">{messages.map(m => <article className={"chat-message " + (m.sender_id === session.user.id ? "message-own" : "message-other")} key={m.id}><div className="message-avatar">{m.sender_id === session.user.id ? (profile?.avatar_url ? <img src={profile.avatar_url} alt="" /> : (profile?.username || 'Я')[0].toUpperCase()) : (selectedConversation.person?.avatar_url ? <img src={selectedConversation.person.avatar_url} alt="" /> : (selectedConversation.person?.username || 'Д')[0].toUpperCase())}</div><div><b>{m.sender_id === session.user.id ? 'Ты' : selectedConversation.person?.display_name || selectedConversation.person?.username}</b>{getImagePath(m.content) ? <button type="button" className="chat-image-open" onClick={() => imageUrls[m.id] && setExpandedImage(imageUrls[m.id])} disabled={!imageUrls[m.id]} aria-label="Открыть фотографию">{imageUrls[m.id] ? <img className="chat-image-message" src={imageUrls[m.id]} alt="Фотография из переписки" loading="lazy" /> : <span className="chat-image-loading">Загружаем фотографию…</span>}</button> : <p>{m.content}</p>}<time className="message-time" dateTime={m.created_at}>{formatMessageTime(m.created_at)}</time></div></article>)}{!messages.length && <p className="chat-no-messages">Пока тихо. Отправь первое сообщение 👋</p>}<div ref={messagesEndRef} /></div>
+            <div className="chat-messages">{messages.map(m => <article className={"chat-message " + (m.sender_id === session.user.id ? "message-own" : "message-other")} key={m.id}>
+              <div className="message-avatar">{m.sender_id === session.user.id ? (profile?.avatar_url ? <img src={profile.avatar_url} alt="" /> : (profile?.username || 'Я')[0].toUpperCase()) : (selectedConversation.person?.avatar_url ? <img src={selectedConversation.person.avatar_url} alt="" /> : (selectedConversation.person?.username || 'Д')[0].toUpperCase())}</div>
+              <div className="message-body">
+                <div className="message-heading"><b>{m.sender_id === session.user.id ? 'Ты' : selectedConversation.person?.display_name || selectedConversation.person?.username}</b><time className="message-time" dateTime={m.created_at}>{formatMessageTime(m.created_at)}{m.edited_at ? ' · изменено' : ''}</time></div>
+                {getImagePath(m.content)
+                  ? <button type="button" className="chat-image-open" onClick={() => imageUrls[m.id] && setExpandedImage(imageUrls[m.id])} disabled={!imageUrls[m.id]} aria-label="Открыть фотографию">{imageUrls[m.id] ? <img className="chat-image-message" src={imageUrls[m.id]} alt="Фотография из переписки" loading="lazy" /> : <span className="chat-image-loading">Загружаем фотографию…</span>}</button>
+                  : editingMessageId === m.id
+                    ? <div className="message-edit-box"><textarea value={editDraft} onChange={event => setEditDraft(event.target.value)} maxLength={10000} rows={2} autoFocus /><div><button type="button" onClick={() => saveEditedMessage(m)} disabled={messageActionBusy || !editDraft.trim()}>Сохранить</button><button type="button" className="message-cancel-edit" onClick={() => { setEditingMessageId(null); setEditDraft(''); }}>Отмена</button></div></div>
+                    : <p>{m.content}</p>}
+                {m.sender_id === session.user.id && !getImagePath(m.content) && editingMessageId !== m.id && <div className="message-actions"><button type="button" onClick={() => beginEditMessage(m)} aria-label="Изменить сообщение">Изменить</button><button type="button" onClick={() => deleteMessage(m)} disabled={messageActionBusy} aria-label="Удалить сообщение">Удалить</button></div>}
+              </div>
+            </article>)}{!messages.length && <p className="chat-no-messages">Пока тихо. Отправь первое сообщение 👋</p>}<div ref={messagesEndRef} /></div>
             <form className="chat-composer" onSubmit={sendMessage}><button type="button" className="chat-camera-button" onClick={openChatCamera} aria-label="Открыть камеру" title="Сделать фото">📷</button><input value={message} onChange={e => setMessage(e.target.value)} placeholder="Написать сообщение…" /><button type="submit">Отправить</button></form>
           </>}
         </div>}
@@ -1189,6 +1253,7 @@ export default function App() {
               <button type="button" className={'accent-option accent-violet ' + (accentTheme === 'violet' ? 'active' : '')} onClick={() => setAccentTheme('violet')}><i />Фиолетовый</button>
               <button type="button" className={'accent-option accent-ocean ' + (accentTheme === 'ocean' ? 'active' : '')} onClick={() => setAccentTheme('ocean')}><i />Океан</button>
               <button type="button" className={'accent-option accent-sunset ' + (accentTheme === 'sunset' ? 'active' : '')} onClick={() => setAccentTheme('sunset')}><i />Закат</button>
+              <button type="button" className={'accent-option accent-ember ' + (accentTheme === 'ember' ? 'active' : '')} onClick={() => setAccentTheme('ember')}><i />Огонь</button>
             </div>
           </section>
           {window.Capacitor?.isNativePlatform?.() && <section className="settings-card"><div className="settings-card-heading"><div><h2>Push-уведомления</h2><p>Разреши KENTY показывать системные уведомления. Для доставки сообщений также нужна настройка сервера уведомлений.</p></div></div><button type="button" className="primary-button" onClick={async () => { const result = await window.kentyEnablePushNotifications?.(); setNotice(result?.message || 'Не удалось включить уведомления.'); }}>Включить уведомления</button></section>}
