@@ -13,12 +13,19 @@ export default async function handler(req, res) {
   try {
     const body = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {});
     const requestedRoom = typeof body.roomName === 'string' ? body.roomName : '';
-    const [roomOwnerId, roomKey] = requestedRoom.split(':');
+    const isServerRoom = requestedRoom.startsWith('server:');
+    const roomParts = requestedRoom.split(':');
+    const roomOwnerId = isServerRoom ? '' : roomParts[0];
+    const roomKey = isServerRoom ? '' : roomParts[1];
+    const serverId = isServerRoom ? roomParts[1] : '';
+    const channelId = isServerRoom ? roomParts[2] : '';
     const displayName = typeof body.displayName === 'string' ? body.displayName : '';
     const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-    if (!uuidPattern.test(roomOwnerId || '') || !ALLOWED_ROOMS.has(roomKey || '')) {
-      return res.status(400).json({ error: 'Выбери одну из доступных голосовых комнат.' });
+    if (isServerRoom
+      ? (roomParts.length !== 3 || !uuidPattern.test(serverId || '') || !uuidPattern.test(channelId || ''))
+      : (!uuidPattern.test(roomOwnerId || '') || !ALLOWED_ROOMS.has(roomKey || '') || roomParts.length !== 2)) {
+      return res.status(400).json({ error: 'Выбери доступную голосовую комнату или серверный голосовой канал.' });
     }
 
     const safeName = displayName
@@ -45,7 +52,40 @@ export default async function handler(req, res) {
       return res.status(401).json({ error: 'Сессия истекла. Войди в KENTY заново.' });
     }
     const currentUser = await authResponse.json();
-    if (roomOwnerId !== currentUser.id) {
+    if (isServerRoom) {
+      const membershipUrl = new URL(`${supabaseUrl}/rest/v1/server_members`);
+      membershipUrl.searchParams.set('select', 'user_id');
+      membershipUrl.searchParams.set('server_id', `eq.${serverId}`);
+      membershipUrl.searchParams.set('user_id', `eq.${currentUser.id}`);
+      membershipUrl.searchParams.set('limit', '1');
+      const membershipResponse = await fetch(membershipUrl, {
+        headers: { apikey: supabaseAnonKey, Authorization: `Bearer ${bearer}` }
+      });
+      if (!membershipResponse.ok) {
+        return res.status(503).json({ error: 'Не удалось проверить участие на сервере.' });
+      }
+      const membership = await membershipResponse.json();
+      if (!Array.isArray(membership) || membership.length === 0) {
+        return res.status(403).json({ error: 'Войти в голосовой канал могут только участники сервера.' });
+      }
+
+      const channelUrl = new URL(`${supabaseUrl}/rest/v1/channels`);
+      channelUrl.searchParams.set('select', 'id');
+      channelUrl.searchParams.set('server_id', `eq.${serverId}`);
+      channelUrl.searchParams.set('id', `eq.${channelId}`);
+      channelUrl.searchParams.set('channel_type', 'in.(voice,video)');
+      channelUrl.searchParams.set('limit', '1');
+      const channelResponse = await fetch(channelUrl, {
+        headers: { apikey: supabaseAnonKey, Authorization: `Bearer ${bearer}` }
+      });
+      if (!channelResponse.ok) {
+        return res.status(503).json({ error: 'Не удалось проверить настройки голосового канала.' });
+      }
+      const channel = await channelResponse.json();
+      if (!Array.isArray(channel) || channel.length === 0) {
+        return res.status(403).json({ error: 'Этот канал не является голосовым или недоступен.' });
+      }
+    } else if (roomOwnerId !== currentUser.id) {
       const friendshipUrl = new URL(`${supabaseUrl}/rest/v1/friendships`);
       friendshipUrl.searchParams.set('select', 'id');
       friendshipUrl.searchParams.set('status', 'eq.accepted');
