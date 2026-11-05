@@ -78,7 +78,10 @@ export default function App() {
   const [cameraEnabled, setCameraEnabled] = useState(false);
   const [voiceCameraFacing, setVoiceCameraFacing] = useState('user');
   const [voiceCameraSwitching, setVoiceCameraSwitching] = useState(false);
+  const [screenSharing, setScreenSharing] = useState(false);
+  const [remoteScreenShares, setRemoteScreenShares] = useState({});
   const [remoteVideoStreams, setRemoteVideoStreams] = useState({});
+  const localScreenShareRef = useRef(null);
   const localVideoStreamRef = useRef(null);
   const localVideoRef = useRef(null);
   const micEnabledRef = useRef(true);
@@ -700,6 +703,7 @@ export default function App() {
       peerConnectionsRef.current.delete(remoteId);
     }
     setRemoteVideoStreams(current => { if (!current[remoteId]) return current; const next = { ...current }; delete next[remoteId]; return next; });
+    setRemoteScreenShares(current => { if (!current[remoteId]) return current; const next = { ...current }; delete next[remoteId]; return next; });
     const audio = audioElementsRef.current.get(remoteId);
     if (audio) {
       audio.pause();
@@ -764,6 +768,10 @@ export default function App() {
 
   async function handleVoiceSignal(payload) {
     if (!payload || payload.to !== session.user.id || !payload.from) return;
+    if (payload.kind === 'screen-share-state') {
+      setRemoteScreenShares(current => ({ ...current, [payload.from]: Boolean(payload.sharing) }));
+      return;
+    }
     const pc = createPeerConnection(payload.from, participantNamesRef.current.get(payload.from) || 'Участник');
     try {
       if (payload.kind === 'offer') {
@@ -893,6 +901,9 @@ export default function App() {
       localStreamRef.current = null;
       localVideoStreamRef.current?.getTracks().forEach(track => track.stop());
       localVideoStreamRef.current = null;
+      localScreenShareRef.current?.getTracks().forEach(track => track.stop());
+      localScreenShareRef.current = null;
+      setScreenSharing(false);
       setCameraEnabled(false);
       setRemoteVideoStreams({});
       if (audioRef.current) audioRef.current.innerHTML = '';
@@ -906,6 +917,7 @@ export default function App() {
   }
 
   async function leaveVoiceRoom() {
+    if (localScreenShareRef.current) await stopScreenShare();
     const channel = voiceChannelRef.current;
     voiceChannelRef.current = null;
     if (channel) await supabase.removeChannel(channel).catch(() => {});
@@ -918,6 +930,10 @@ export default function App() {
     localStreamRef.current = null;
     localVideoStreamRef.current?.getTracks().forEach(track => track.stop());
     localVideoStreamRef.current = null;
+    localScreenShareRef.current?.getTracks().forEach(track => track.stop());
+    localScreenShareRef.current = null;
+    setScreenSharing(false);
+    setRemoteScreenShares({});
     setCameraEnabled(false);
     setRemoteVideoStreams({});
     audioElementsRef.current.forEach(audio => { audio.pause(); audio.srcObject = null; audio.remove(); });
@@ -1080,8 +1096,83 @@ export default function App() {
   }
 
   useEffect(() => {
-    if (localVideoRef.current) localVideoRef.current.srcObject = cameraEnabled ? localVideoStreamRef.current : null;
-  }, [cameraEnabled]);
+    if (localVideoRef.current) {
+      localVideoRef.current.srcObject = screenSharing ? localScreenShareRef.current : cameraEnabled ? localVideoStreamRef.current : null;
+      if (screenSharing || cameraEnabled) localVideoRef.current.play().catch(() => {});
+    }
+  }, [cameraEnabled, screenSharing]);
+
+  async function stopScreenShare() {
+    const displayStream = localScreenShareRef.current;
+    if (!displayStream) return;
+    localScreenShareRef.current = null;
+    displayStream.getTracks().forEach(track => { track.onended = null; track.stop(); });
+    const cameraTrack = cameraEnabled ? localVideoStreamRef.current?.getVideoTracks()?.[0] : null;
+    await Promise.all([...peerConnectionsRef.current.values()].map(pc => {
+      const sender = pc.getTransceivers().find(t => t.receiver.track.kind === 'video')?.sender;
+      return sender ? sender.replaceTrack(cameraTrack || null).catch(err => console.warn('KENTY screen share stop:', err)) : Promise.resolve();
+    }));
+    setScreenSharing(false);
+    if (localVideoRef.current) {
+      localVideoRef.current.srcObject = cameraEnabled ? localVideoStreamRef.current : null;
+      if (cameraEnabled) await localVideoRef.current.play().catch(() => {});
+    }
+    const channel = voiceChannelRef.current;
+    if (channel) {
+      const peers = Object.values(channel.presenceState?.() || {}).flat().filter(peer => peer.userId && peer.userId !== session.user.id);
+      await Promise.all(peers.map(peer => sendVoiceSignal(peer.userId, { kind: 'screen-share-state', sharing: false }).catch(() => {})));
+    }
+    setVoiceStatus('Демонстрация экрана остановлена');
+  }
+
+  async function toggleScreenShare() {
+    if (!connected) return;
+    if (screenSharing) {
+      await stopScreenShare();
+      return;
+    }
+    if (!navigator.mediaDevices?.getDisplayMedia) {
+      setVoiceError('Этот браузер не поддерживает демонстрацию экрана. Попробуй открыть KENTY в Chrome или Edge на компьютере.');
+      return;
+    }
+    try {
+      setVoiceError('');
+      const displayStream = await navigator.mediaDevices.getDisplayMedia({
+        video: { frameRate: { ideal: 15, max: 30 } },
+        audio: false
+      });
+      const displayTrack = displayStream.getVideoTracks()[0];
+      if (!displayTrack) {
+        displayStream.getTracks().forEach(track => track.stop());
+        throw new Error('Не удалось получить изображение экрана.');
+      }
+      await Promise.all([...peerConnectionsRef.current.values()].map(pc => {
+        const sender = pc.getTransceivers().find(t => t.receiver.track.kind === 'video')?.sender;
+        return sender ? sender.replaceTrack(displayTrack) : Promise.resolve();
+      }));
+      localScreenShareRef.current = displayStream;
+      setScreenSharing(true);
+      displayTrack.onended = () => {
+        if (localScreenShareRef.current === displayStream) stopScreenShare().catch(err => console.warn('KENTY screen share ended:', err));
+      };
+      if (localVideoRef.current) {
+        localVideoRef.current.srcObject = displayStream;
+        await localVideoRef.current.play().catch(() => {});
+      }
+      const channel = voiceChannelRef.current;
+      if (channel) {
+        const peers = Object.values(channel.presenceState?.() || {}).flat().filter(peer => peer.userId && peer.userId !== session.user.id);
+        await Promise.all(peers.map(peer => sendVoiceSignal(peer.userId, { kind: 'screen-share-state', sharing: true }).catch(() => {})));
+      }
+      setVoiceStatus('Ты показываешь экран участникам комнаты');
+    } catch (shareError) {
+      if (shareError.name === 'NotAllowedError' || shareError.name === 'AbortError') {
+        setVoiceError('Демонстрация экрана отменена или доступ запрещён.');
+      } else {
+        setVoiceError(shareError.message || 'Не удалось начать демонстрацию экрана.');
+      }
+    }
+  }
 
   function toggleMic() {
     const stream = localStreamRef.current;
@@ -1260,9 +1351,9 @@ export default function App() {
           <div className="voice-heading"><div><div className="eyebrow">REAL-TIME VOICE</div><h1>Голосовые комнаты</h1><p>Заходи к друзьям, общайся и оставайся на связи.</p></div><div className="voice-orb">♫</div></div>
           {!connected && <><div className="room-owner-picker"><label htmlFor="voice-owner">КОМНАТА КОГО</label><select id="voice-owner" value={activeVoiceOwner?.id || ''} onChange={e => setSelectedVoiceOwnerId(e.target.value)}>{voiceOwners.map(owner => <option key={owner.id} value={owner.id}>{owner.label}</option>)}</select><small>Войти можно только в свою комнату или комнату принятого друга.</small></div><div className="room-picker">{VOICE_ROOMS.map(r => <button type="button" key={r.id} className={'room-card ' + (selectedRoom.id === r.id ? 'active' : '')} onClick={() => setSelectedRoom(r)}><span className="room-card-icon">{r.icon}</span><span className="room-card-title">{r.label}</span><span className="room-card-description">{r.description}</span></button>)}</div></>}
           {!connected ? <form className="join-panel" onSubmit={joinVoiceRoom}><div className="panel-heading"><div><span className="eyebrow">ПОДКЛЮЧЕНИЕ</span><h2>Войти в «{selectedRoom.label}»</h2></div></div><div className="form-grid"><label><span>ТВОЁ ИМЯ</span><input value={voiceName} onChange={e => setVoiceName(e.target.value)} placeholder="Твоё имя" /></label></div><button type="button" className={"noise-toggle " + (noiseSuppression ? "active" : "")} aria-pressed={noiseSuppression} onClick={toggleNoiseSuppression}><span className="noise-toggle-icon">✦</span><span><b>Шумоподавление</b><small>{noiseSuppression ? 'Включено · подавляет фоновые шумы' : 'Выключено · исходный звук микрофона'}</small></span><span className="noise-toggle-state">{noiseSuppression ? 'ВКЛ' : 'ВЫКЛ'}</span></button>{voiceError && <div className="error-box">{voiceError}</div>}<div className="join-bottom"><div className="join-hint">Выбирай комнату и подключайся — код не нужен.</div><button className="primary-button" disabled={joining}>{joining ? 'Подключаем…' : 'Войти в комнату →'}</button></div></form> : <section className="live-panel"><div className="panel-heading"><div><span className="eyebrow">ТЫ В КОМНАТЕ</span><h2>{selectedRoom.label}</h2></div><span className="live-badge"><i /> В ЭФИРЕ</span></div><div className="voice-video-grid">
-              {cameraEnabled && <div className="voice-video-tile local-video-tile"><video ref={localVideoRef} autoPlay playsInline muted /><span>Ты · камера включена</span></div>}
-              {Object.entries(remoteVideoStreams).map(([peerId, stream]) => <div className="voice-video-tile" key={peerId}><video autoPlay playsInline ref={element => { if (element && element.srcObject !== stream) element.srcObject = stream; }} /><span>{participants.find(person => person.id === peerId)?.name || 'Участник'}</span></div>)}
-            </div><div className="participant-heading">УЧАСТНИКИ · {participants.length}</div><div className="participant-list">{participants.map(p => <div className="participant" key={p.id}><div className="participant-avatar">{p.name[0]?.toUpperCase()}</div><div className="participant-name"><b>{p.name}{p.local ? ' (ты)' : ''}</b><small>{p.speaking ? 'Говорит' : 'На связи'}</small></div><span className="mic-state">{p.muted ? 'Микрофон выкл.' : 'Микрофон вкл.'}</span></div>)}</div><div className="voice-controls"><button type="button" className={"control-button " + (!micEnabled ? "control-muted" : "")} aria-pressed={micEnabled} onClick={toggleMic}>{micEnabled ? '🎙 Выключить микрофон' : '🔇 Включить микрофон'}</button><button type="button" className={"control-button voice-camera-button " + (cameraEnabled ? "camera-live-active" : "")} aria-pressed={cameraEnabled} onClick={toggleVoiceCamera}>{cameraEnabled ? '📷 Выключить камеру' : '📷 Включить камеру'}</button>{cameraEnabled && <button type="button" className="control-button voice-camera-switch" onClick={switchVoiceCamera} disabled={voiceCameraSwitching}>{voiceCameraSwitching ? "⏳ Переключаем…" : "🔄 Перевернуть камеру"}</button>}<button type="button" className={"control-button noise-live-button " + (noiseSuppression ? "noise-live-active" : "")} aria-pressed={noiseSuppression} onClick={toggleNoiseSuppression}>✦ Шумоподавление: {noiseSuppression ? 'ВКЛ' : 'ВЫКЛ'}</button><button className="leave-button" onClick={leaveVoiceRoom}>Выйти из комнаты</button></div></section>}
+              {(cameraEnabled || screenSharing) && <div className="voice-video-tile local-video-tile"><video ref={localVideoRef} autoPlay playsInline muted /><span>{screenSharing ? 'Ты · демонстрация экрана' : 'Ты · камера включена'}</span></div>}
+              {Object.entries(remoteVideoStreams).map(([peerId, stream]) => <div className="voice-video-tile" key={peerId}><video autoPlay playsInline ref={element => { if (element && element.srcObject !== stream) element.srcObject = stream; }} /><span>{remoteScreenShares[peerId] ? '🖥 Демонстрация экрана · ' : ''}{participants.find(person => person.id === peerId)?.name || 'Участник'}</span></div>)}
+            </div><div className="participant-heading">УЧАСТНИКИ · {participants.length}</div><div className="participant-list">{participants.map(p => <div className="participant" key={p.id}><div className="participant-avatar">{p.name[0]?.toUpperCase()}</div><div className="participant-name"><b>{p.name}{p.local ? ' (ты)' : ''}</b><small>{p.speaking ? 'Говорит' : 'На связи'}</small></div><span className="mic-state">{p.muted ? 'Микрофон выкл.' : 'Микрофон вкл.'}</span></div>)}</div><div className="voice-controls"><button type="button" className={"control-button " + (!micEnabled ? "control-muted" : "")} aria-pressed={micEnabled} onClick={toggleMic}>{micEnabled ? '🎙 Выключить микрофон' : '🔇 Включить микрофон'}</button><button type="button" className={"control-button voice-camera-button " + (cameraEnabled ? "camera-live-active" : "")} aria-pressed={cameraEnabled} onClick={toggleVoiceCamera}>{cameraEnabled ? '📷 Выключить камеру' : '📷 Включить камеру'}</button><button type="button" className={"control-button screen-share-button " + (screenSharing ? "camera-live-active" : "")} aria-pressed={screenSharing} onClick={toggleScreenShare}>{screenSharing ? "⏹ Остановить показ" : "🖥 Показать экран"}</button>{cameraEnabled && <button type="button" className="control-button voice-camera-switch" onClick={switchVoiceCamera} disabled={voiceCameraSwitching}>{voiceCameraSwitching ? "⏳ Переключаем…" : "🔄 Перевернуть камеру"}</button>}<button type="button" className={"control-button noise-live-button " + (noiseSuppression ? "noise-live-active" : "")} aria-pressed={noiseSuppression} onClick={toggleNoiseSuppression}>✦ Шумоподавление: {noiseSuppression ? 'ВКЛ' : 'ВЫКЛ'}</button><button className="leave-button" onClick={leaveVoiceRoom}>Выйти из комнаты</button></div></section>}
           <div className="status-line">{voiceStatus}</div><div className="alpha-note">Голос идёт напрямую между участниками через WebRTC. Комнаты доступны владельцу и принятым друзьям.</div><div className="audio-bin" ref={audioRef} />
         </div>}
       </section>
