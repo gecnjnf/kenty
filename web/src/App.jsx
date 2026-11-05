@@ -39,6 +39,7 @@ export default function App() {
   const [notice, setNotice] = useState('');
   const [installPrompt, setInstallPrompt] = useState(null);
   const [isInstalled, setIsInstalled] = useState(() => window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone === true);
+  const [isOnline, setIsOnline] = useState(() => navigator.onLine);
   const [error, setError] = useState('');
   const [tab, setTab] = useState('friends');
   const [theme, setTheme] = useState(() => localStorage.getItem('kenty-theme') || 'dark');
@@ -106,6 +107,16 @@ export default function App() {
   const participantNamesRef = useRef(new Map());
   const voiceAudioContextRef = useRef(null);
   const voiceRoomReadyRef = useRef(false);
+
+  useEffect(() => {
+    const updateNetworkStatus = () => setIsOnline(navigator.onLine);
+    window.addEventListener('online', updateNetworkStatus);
+    window.addEventListener('offline', updateNetworkStatus);
+    return () => {
+      window.removeEventListener('online', updateNetworkStatus);
+      window.removeEventListener('offline', updateNetworkStatus);
+    };
+  }, []);
 
   useEffect(() => {
     const onInstallAvailable = (event) => { event.preventDefault(); setInstallPrompt(event); };
@@ -1279,7 +1290,7 @@ export default function App() {
       <section className="main-panel">
         <header className="topbar">
           <div className="topbar-title"><span className="hash">{tab === 'chat' ? '#' : tab === 'servers' ? '✦' : '◖'}</span><b>{tab === 'friends' ? 'друзья' : tab === 'chat' ? (selectedConversation?.person?.display_name || selectedConversation?.person?.username || 'сообщения') : tab === 'servers' ? 'сообщества' : tab === 'settings' ? 'настройки' : 'голосовые-комнаты'}</b></div>
-          <div className="topbar-right">{!isInstalled && <button type="button" className="install-button" onClick={installApp}>Установить</button>}<span className={'connection-pill ' + (connected ? 'connected' : '')}><i />{connected ? 'В голосовой комнате' : 'KENTY · пространство для своих'}</span></div>
+          <div className="topbar-right">{!isInstalled && <button type="button" className="install-button" onClick={installApp}>Установить</button>}<span className={'network-pill ' + (isOnline ? 'network-online' : 'network-offline')} title={isOnline ? 'Браузер сообщает, что интернет доступен' : 'Нет сетевого подключения'}><i />{isOnline ? 'Интернет есть' : 'Нет интернета'}</span><span className={'connection-pill ' + (connected ? 'connected' : '')}><i />{connected ? 'В голосовой комнате' : 'KENTY · пространство для своих'}</span></div>
         </header>
 
         {error && <div className="global-error">{error}<button onClick={() => setError('')}>×</button></div>}
