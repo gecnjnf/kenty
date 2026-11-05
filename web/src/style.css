@@ -1666,3 +1666,67 @@ body, .app-shell { background: #09090d; }
   .server-chat-composer { margin-bottom:2px; }
   .sidebar-create-form input,.sidebar-join-form input { min-height:36px;font-size:12px; }
 }
+
+
+.server-empty-card {
+  width:min(100%,520px);margin:auto;padding:34px;
+  display:flex;flex-direction:column;align-items:center;text-align:center;gap:13px;
+  border:1px solid rgba(255,129,93,.23);border-radius:20px;
+  background:radial-gradient(ellipse at 50% 0%,rgba(255,105,73,.16),transparent 55%),linear-gradient(145deg,#252027,#191b23);
+  box-shadow:0 24px 65px rgba(0,0,0,.22);
+}
+.server-empty-icon {
+  width:64px;height:64px;display:grid;place-items:center;border-radius:20px;
+  color:#fff;font-size:31px;font-weight:900;
+  background:linear-gradient(145deg,#ff8758,#cf392f);
+  box-shadow:0 12px 35px rgba(236,79,52,.25);
+}
+.server-empty-card h2 { margin:5px 0 0;color:#fff;font-size:22px;letter-spacing:-.5px; }
+.server-empty-card p { max-width:350px;margin:0 0 5px;color:#9fa2ae;font-size:12px;line-height:1.6; }
+.server-empty-card>.primary-button { min-height:43px;padding:0 20px; }
+.server-inline-form { width:100%;max-width:390px;display:flex;gap:8px;margin-top:3px; }
+.server-inline-form input {
+  flex:1;min-width:0;min-height:42px;padding:0 12px;
+  color:#f5f1f0;background:#12141a;border:1px solid rgba(255,255,255,.12);
+  border-radius:10px;outline:none;font-size:12px;
+}
+.server-inline-form input:focus { border-color:#ff795c; }
+.server-inline-form button {
+  flex:none;padding:0 14px;border:0;border-radius:10px;
+  color:#fff;background:linear-gradient(135deg,#ff7950,#e94c35);
+  font-size:11px;font-weight:800;
+}
+.server-header-actions { display:flex;align-items:center;gap:8px;flex:none; }
+.server-secondary-button {
+  min-height:42px;padding:0 13px;border:1px solid rgba(255,142,109,.32);
+  border-radius:10px;background:rgba(255,111,78,.1);color:#ffad96;font-size:11px;font-weight:800;
+}
+.mobile-server-select,.mobile-channel-select { display:none; }
+.server-channel-heading .mobile-channel-select { margin-left:auto; }
+:root[data-theme="light"] .server-empty-card { background:linear-gradient(145deg,#fff7f3,#fff);border-color:#f0c5b7; }
+:root[data-theme="light"] .server-empty-card h2 { color:#2b2528; }
+:root[data-theme="light"] .server-empty-card p { color:#6d656b; }
+@media(max-width:640px) {
+  .sidebar .server-create-nav,.sidebar .sidebar-create-form,.sidebar .sidebar-join-form,
+  .sidebar .channel-sidebar-label,.sidebar .server-channel-list,.sidebar .create-channel-toggle { display:none!important; }
+  .server-content { padding-top:13px; }
+  .server-empty-card { width:100%;padding:26px 17px;border-radius:16px; }
+  .server-empty-card h2 { font-size:19px; }
+  .server-inline-form { max-width:none; }
+  .server-inline-form input { min-height:44px;font-size:14px; }
+  .server-inline-form button { min-height:44px; }
+  .server-welcome-copy { width:100%; }
+  .server-header-actions { width:100%; }
+  .server-header-actions .primary-button,.server-header-actions .server-secondary-button { flex:1;min-width:0; }
+  .mobile-server-select {
+    display:block;width:100%;max-width:100%;min-height:38px;margin-top:12px;padding:0 10px;
+    color:#f5e9e6;background:#251d21;border:1px solid rgba(255,145,115,.28);border-radius:9px;font-size:12px;
+  }
+  .mobile-channel-select {
+    display:block;max-width:48%;min-width:110px;min-height:34px;padding:0 7px;
+    color:#f4e8e4;background:#211c20;border:1px solid rgba(255,145,115,.25);border-radius:8px;font-size:10px;
+  }
+  :root[data-theme="light"] .mobile-server-select,:root[data-theme="light"] .mobile-channel-select {
+    color:#30272a;background:#fff;border-color:#e6b6a9;
+  }
+}
