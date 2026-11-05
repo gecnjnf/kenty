@@ -19,6 +19,13 @@ export default function App() {
   const [installPrompt, setInstallPrompt] = useState(null);
   const [isInstalled, setIsInstalled] = useState(() => window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone === true);
   const [isOnline, setIsOnline] = useState(() => navigator.onLine);
+  const [networkQuality, setNetworkQuality] = useState(() => {
+    const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+    if (!connection) return 'unknown';
+    if (connection.effectiveType === 'slow-2g' || connection.effectiveType === '2g' || (connection.downlink > 0 && connection.downlink < 0.8)) return 'weak';
+    if (connection.effectiveType === '3g' || (connection.downlink > 0 && connection.downlink < 1.5)) return 'moderate';
+    return 'good';
+  });
   const [error, setError] = useState('');
   const [tab, setTab] = useState('friends');
   const [theme, setTheme] = useState(() => localStorage.getItem('kenty-theme') || 'dark');
@@ -88,12 +95,27 @@ export default function App() {
   const voiceRoomReadyRef = useRef(false);
 
   useEffect(() => {
+    const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
     const updateNetworkStatus = () => setIsOnline(navigator.onLine);
+    const updateNetworkQuality = () => {
+      if (!connection) {
+        setNetworkQuality('unknown');
+        return;
+      }
+      const effectiveType = connection.effectiveType;
+      const downlink = Number(connection.downlink) || 0;
+      if (effectiveType === 'slow-2g' || effectiveType === '2g' || (downlink > 0 && downlink < 0.8)) setNetworkQuality('weak');
+      else if (effectiveType === '3g' || (downlink > 0 && downlink < 1.5)) setNetworkQuality('moderate');
+      else setNetworkQuality('good');
+    };
     window.addEventListener('online', updateNetworkStatus);
     window.addEventListener('offline', updateNetworkStatus);
+    connection?.addEventListener?.('change', updateNetworkQuality);
+    updateNetworkQuality();
     return () => {
       window.removeEventListener('online', updateNetworkStatus);
       window.removeEventListener('offline', updateNetworkStatus);
+      connection?.removeEventListener?.('change', updateNetworkQuality);
     };
   }, []);
 
@@ -1269,7 +1291,7 @@ export default function App() {
       <section className="main-panel">
         <header className="topbar">
           <div className="topbar-title"><span className="hash">{tab === 'chat' ? '#' : tab === 'servers' ? '✦' : '◖'}</span><b>{tab === 'friends' ? 'друзья' : tab === 'chat' ? (selectedConversation?.person?.display_name || selectedConversation?.person?.username || 'сообщения') : tab === 'servers' ? 'сообщества' : tab === 'settings' ? 'настройки' : 'голосовые-комнаты'}</b></div>
-          <div className="topbar-right">{!isInstalled && <button type="button" className="install-button" onClick={installApp}>Установить</button>}<span className={'network-pill ' + (isOnline ? 'network-online' : 'network-offline')} title={isOnline ? 'Браузер сообщает, что интернет доступен' : 'Нет сетевого подключения'}><i />{isOnline ? 'Интернет есть' : 'Нет интернета'}</span><span className={'connection-pill ' + (connected ? 'connected' : '')}><i />{connected ? 'В голосовой комнате' : 'KENTY · пространство для своих'}</span></div>
+          <div className="topbar-right">{!isInstalled && <button type="button" className="install-button" onClick={installApp}>Установить</button>}<span className={'network-pill ' + (!isOnline ? 'network-offline' : networkQuality === 'weak' ? 'network-weak' : networkQuality === 'moderate' ? 'network-moderate' : 'network-online')} title={!isOnline ? 'Нет сетевого подключения' : networkQuality === 'unknown' ? 'Браузер не предоставляет оценку качества сети' : 'Оценка качества по данным браузера; фактическое качество звонка может отличаться'}><i />{!isOnline ? 'Нет интернета' : networkQuality === 'weak' ? 'Слабая сеть' : networkQuality === 'moderate' ? 'Средняя сеть' : networkQuality === 'good' ? 'Хорошая сеть' : 'Интернет есть'}</span><span className={'connection-pill ' + (connected ? 'connected' : '')}><i />{connected ? 'В голосовой комнате' : 'KENTY · пространство для своих'}</span></div>
         </header>
 
         {error && <div className="global-error">{error}<button onClick={() => setError('')}>×</button></div>}
