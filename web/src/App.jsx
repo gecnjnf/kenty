@@ -1,31 +1,10 @@
 import { Suspense, lazy, useEffect, useRef, useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
+import { formatMessageTime, getImagePath, VOICE_ROOMS } from './lib/chatUtils.js';
 
 const Communities = lazy(() => import('./Communities.jsx'));
 
 const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_ANON_KEY);
-const messageTimeFormatter = new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit' });
-
-function formatMessageTime(value) {
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? '' : messageTimeFormatter.format(date);
-}
-
-const IMAGE_MESSAGE_PREFIX = 'kenty-image:v1:';
-
-function getImagePath(content) {
-  if (typeof content !== 'string' || !content.startsWith(IMAGE_MESSAGE_PREFIX)) return null;
-  const path = content.slice(IMAGE_MESSAGE_PREFIX.length);
-  const parts = path.split('/');
-  return parts.length === 3 && parts.every(Boolean) ? path : null;
-}
-
-const VOICE_ROOMS = [
-  { id: 'lobby', label: 'Общая', description: 'Для разговоров обо всём', icon: '◉' },
-  { id: 'gaming', label: 'Игровая', description: 'Собираемся поиграть', icon: '🎮' },
-  { id: 'chill', label: 'Тихая', description: 'Спокойное общение', icon: '☾' }
-];
-
 export default function App() {
   const [session, setSession] = useState(null);
   const [profile, setProfile] = useState(null);
