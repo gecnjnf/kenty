@@ -1600,3 +1600,14 @@ body, .app-shell { background: #09090d; }
 :root[data-theme="light"] .community-server-heading p,:root[data-theme="light"] .community-chat-heading small,:root[data-theme="light"] .community-message-meta time{color:#77718f}
 @media(max-width:850px){.communities-layout{grid-template-columns:minmax(190px,235px) minmax(0,1fr)}.community-content-grid{grid-template-columns:170px minmax(0,1fr)}}
 @media(max-width:640px){.communities-page{padding:14px 11px 24px}.communities-header{align-items:flex-start;margin-bottom:13px}.communities-header h1{font-size:23px}.communities-header p{font-size:10px;max-width:245px}.communities-count{font-size:8px;padding:7px 9px}.communities-layout{height:auto;min-height:0;display:flex;flex-direction:column}.communities-list{max-height:340px;padding:11px}.community-workspace{min-height:470px}.community-content-grid{grid-template-columns:112px minmax(0,1fr);min-height:380px}.community-channels{padding:12px 7px}.community-channel{font-size:9px;padding:8px 6px}.community-channel-heading{font-size:7px;letter-spacing:.5px}.community-server-heading{padding:14px}.community-server-heading h2{font-size:15px}.community-invite-button{font-size:8px;padding:9px}.community-messages{padding:14px 10px}.community-composer{padding:9px}.community-composer button{font-size:8px;padding:0 9px}.community-message p{font-size:10px}.community-invite-link{padding:10px;grid-template-columns:minmax(0,1fr) auto}.community-invite-link button{font-size:8px;padding:8px}}
+
+
+/* Direct message controls */
+.message-actions{display:flex;gap:8px;margin-top:5px}
+.message-actions button,.message-edit-form button{border:0;background:transparent;color:#a9a1d7;font-size:9px;padding:3px 5px;border-radius:5px}
+.message-actions button:hover,.message-edit-form button:hover{background:rgba(145,124,255,.16);color:#fff}
+.message-edit-form{display:flex;flex-wrap:wrap;gap:6px;margin-top:7px}
+.message-edit-form textarea{width:min(100%,520px);min-height:54px;resize:vertical;background:#171827;color:#fff;border:1px solid #6557a8;border-radius:8px;padding:9px;font:inherit;font-size:11px}
+.message-edit-form button[type="submit"]{background:linear-gradient(120deg,#7764e8,#3b9eae);color:white;padding:7px 10px}
+:root[data-theme="light"] .message-edit-form textarea{background:#fff;color:#29253b;border-color:#b9afe4}
+:root[data-theme="light"] .message-actions button{color:#6b5aa7}
