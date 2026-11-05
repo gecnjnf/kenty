@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
-import { Room, RoomEvent, Track } from 'livekit-client';
 
 const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_ANON_KEY);
 const messageTimeFormatter = new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit' });
@@ -93,6 +92,7 @@ export default function App() {
   const [voiceStatus, setVoiceStatus] = useState('Голосовые комнаты готовы к подключению');
   const voiceChannelRef = useRef(null);
   const liveKitRoomRef = useRef(null);
+  const liveKitSdkRef = useRef(null);
   const localStreamRef = useRef(null);
   const peerConnectionsRef = useRef(new Map());
   const offeredToRef = useRef(new Set());
@@ -706,6 +706,8 @@ export default function App() {
   }
 
   function handleLiveKitTrackSubscribed(track, publication, participant) {
+    const Track = liveKitSdkRef.current?.Track;
+    if (!Track) return;
     if (track.kind === Track.Kind.Audio) {
       const element = track.attach();
       const key = participant.identity + ':' + (publication.trackSid || track.sid || 'audio');
@@ -720,13 +722,15 @@ export default function App() {
     if (track.kind === Track.Kind.Video) {
       const stream = new MediaStream([track.mediaStreamTrack]);
       setRemoteVideoStreams(current => ({ ...current, [participant.identity]: stream }));
-      if (publication.source === Track.Source.ScreenShare) {
+      if (publication.source === liveKitSdk.Track.Source.ScreenShare) {
         setRemoteScreenShares(current => ({ ...current, [participant.identity]: true }));
       }
     }
   }
 
   function handleLiveKitTrackUnsubscribed(track, publication, participant) {
+    const Track = liveKitSdkRef.current?.Track;
+    if (!Track) return;
     const key = participant.identity + ':' + (publication.trackSid || track.sid || 'audio');
     track.detach();
     const element = audioElementsRef.current.get(key);
@@ -744,7 +748,7 @@ export default function App() {
         }
         return next;
       });
-      if (publication.source === Track.Source.ScreenShare) {
+      if (publication.source === liveKitSdk.Track.Source.ScreenShare) {
         setRemoteScreenShares(current => ({ ...current, [participant.identity]: false }));
       }
     }
@@ -786,20 +790,22 @@ export default function App() {
         throw new Error(tokenData.error || 'Сервер не выдал токен для голосовой комнаты.');
       }
 
-      room = new Room({ adaptiveStream: true, dynacast: true });
+      const liveKitSdk = await import('livekit-client');
+      liveKitSdkRef.current = liveKitSdk;
+      room = new liveKitSdk.Room({ adaptiveStream: true, dynacast: true });
       liveKitRoomRef.current = room;
 
       room
-        .on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
+        .on(liveKitSdk.RoomEvent.TrackSubscribed, (track, publication, participant) => {
           handleLiveKitTrackSubscribed(track, publication, participant);
           updateVoiceParticipants();
         })
-        .on(RoomEvent.TrackUnsubscribed, (track, publication, participant) => {
+        .on(liveKitSdk.RoomEvent.TrackUnsubscribed, (track, publication, participant) => {
           handleLiveKitTrackUnsubscribed(track, publication, participant);
           updateVoiceParticipants();
         })
-        .on(RoomEvent.ParticipantConnected, updateVoiceParticipants)
-        .on(RoomEvent.ParticipantDisconnected, participant => {
+        .on(liveKitSdk.RoomEvent.ParticipantConnected, updateVoiceParticipants)
+        .on(liveKitSdk.RoomEvent.ParticipantDisconnected, participant => {
           setRemoteVideoStreams(current => {
             const next = { ...current };
             delete next[participant.identity];
@@ -812,23 +818,23 @@ export default function App() {
           });
           updateVoiceParticipants();
         })
-        .on(RoomEvent.ActiveSpeakersChanged, updateVoiceParticipants)
-        .on(RoomEvent.LocalTrackUnpublished, publication => {
-          if (publication.source === Track.Source.Camera) setCameraEnabled(false);
-          if (publication.source === Track.Source.ScreenShare) setScreenSharing(false);
+        .on(liveKitSdk.RoomEvent.ActiveSpeakersChanged, updateVoiceParticipants)
+        .on(liveKitSdk.RoomEvent.LocalTrackUnpublished, publication => {
+          if (publication.source === liveKitSdk.Track.Source.Camera) setCameraEnabled(false);
+          if (publication.source === liveKitSdk.Track.Source.ScreenShare) setScreenSharing(false);
           updateVoiceParticipants();
         })
-        .on(RoomEvent.ConnectionStateChanged, state => {
+        .on(liveKitSdk.RoomEvent.ConnectionStateChanged, state => {
           setVoiceStatus(state === 'connected' ? 'Связь с голосовой комнатой установлена' : 'Состояние соединения: ' + state);
         })
-        .on(RoomEvent.AudioPlaybackStatusChanged, () => {
+        .on(liveKitSdk.RoomEvent.AudioPlaybackStatusChanged, () => {
           if (!room.canPlaybackAudio) {
             setVoiceError('Звук заблокирован браузером. Нажми на экран и повтори подключение звука.');
           } else {
             setVoiceError('');
           }
         })
-        .on(RoomEvent.Disconnected, () => {
+        .on(liveKitSdk.RoomEvent.Disconnected, () => {
           setConnected(false);
           setMicEnabled(false);
           setCameraEnabled(false);
@@ -911,7 +917,8 @@ export default function App() {
     setNoiseSuppression(next);
     localStorage.setItem('kenty-noise-suppression', String(next));
     const room = liveKitRoomRef.current;
-    const localTrack = room?.localParticipant.getTrackPublication(Track.Source.Microphone)?.track;
+    const Track = liveKitSdkRef.current?.Track;
+    const localTrack = Track ? room?.localParticipant.getTrackPublication(Track.Source.Microphone)?.track : null;
     const mediaTrack = localTrack?.mediaStreamTrack;
     if (mediaTrack && connected) {
       try {
@@ -947,7 +954,8 @@ export default function App() {
     const room = liveKitRoomRef.current;
     if (!room || !connected || !cameraEnabled || voiceCameraSwitching || screenSharing) return;
     const nextFacing = voiceCameraFacing === 'user' ? 'environment' : 'user';
-    const cameraTrack = room.localParticipant.getTrackPublication(Track.Source.Camera)?.track;
+    const Track = liveKitSdkRef.current?.Track;
+    const cameraTrack = Track ? room.localParticipant.getTrackPublication(Track.Source.Camera)?.track : null;
     if (!cameraTrack?.restartTrack) {
       setVoiceError('Не удалось переключить камеру. Выключи и снова включи её.');
       return;
@@ -969,6 +977,8 @@ export default function App() {
     const room = liveKitRoomRef.current;
     const element = localVideoRef.current;
     if (!room || !element || (!cameraEnabled && !screenSharing)) return undefined;
+    const Track = liveKitSdkRef.current?.Track;
+    if (!Track) return undefined;
     const source = screenSharing ? Track.Source.ScreenShare : Track.Source.Camera;
     const publication = room.localParticipant.getTrackPublication(source);
     const track = publication?.track;
