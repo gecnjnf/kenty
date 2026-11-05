@@ -418,6 +418,37 @@ export default function App() {
     } finally { setServerBusy(false); }
   }
 
+  async function changeServerMemberRole(member, role) {
+    const currentServer = servers.find(item => item.id === selectedServerId);
+    if (!currentServer || !['owner','admin'].includes(currentServer.role) || member.role === 'owner') return;
+    const allowedRoles = currentServer.role === 'owner' ? ['admin','moderator','member','owner'] : ['admin','moderator','member'];
+    if (!allowedRoles.includes(role)) return;
+    const { error: roleError } = await supabase.from('server_members')
+      .update({ role })
+      .eq('server_id', selectedServerId)
+      .eq('user_id', member.user_id);
+    if (roleError) setError('Не удалось изменить роль: ' + roleError.message);
+    else {
+      setServerMembers(current => current.map(item => item.user_id === member.user_id ? { ...item, role } : item));
+      setNotice('Роль участника обновлена.');
+    }
+  }
+
+  async function removeServerMember(member) {
+    const currentServer = servers.find(item => item.id === selectedServerId);
+    if (!currentServer || !['owner','admin','moderator'].includes(currentServer.role) || member.role === 'owner' || member.user_id === session.user.id) return;
+    if (!window.confirm('Исключить ' + (member.display_name || member.username) + ' с сервера?')) return;
+    const { error: removeError } = await supabase.from('server_members')
+      .delete()
+      .eq('server_id', selectedServerId)
+      .eq('user_id', member.user_id);
+    if (removeError) setError('Не удалось исключить участника: ' + removeError.message);
+    else {
+      setServerMembers(current => current.filter(item => item.user_id !== member.user_id));
+      setNotice('Участник исключён с сервера.');
+    }
+  }
+
   async function createServerInvite() {
     const currentServer = servers.find(item => item.id === selectedServerId);
     if (!currentServer || !['owner','admin','moderator'].includes(currentServer.role)) return;
@@ -1479,7 +1510,7 @@ export default function App() {
                 <form className="chat-composer server-chat-composer" onSubmit={sendChannelMessage}><input value={channelMessage} onChange={event => setChannelMessage(event.target.value)} placeholder={'Написать в #' + (serverChannels.find(channel => channel.id === selectedChannelId)?.name || 'канал') + '…'} /><button type="submit">Отправить</button></form>
               </div>
               <aside className="server-member-panel"><div className="server-member-heading">УЧАСТНИКИ <span>{serverMembers.length}</span></div>
-                {serverMembers.map(member => <div className="server-member-row" key={member.user_id}><div className="server-member-avatar">{member.avatar_url ? <img src={member.avatar_url} alt="" /> : (member.display_name || member.username || '?')[0].toUpperCase()}<i className={onlineUserIds.has(member.user_id) ? 'online' : ''} /></div><div><b>{member.display_name || member.username}</b><small>{member.role === 'owner' ? 'Владелец' : member.role === 'admin' ? 'Администратор' : member.role === 'moderator' ? 'Модератор' : 'Участник'}</small></div></div>)}
+                {serverMembers.map(member => <div className="server-member-row" key={member.user_id}><div className="server-member-avatar">{member.avatar_url ? <img src={member.avatar_url} alt="" /> : (member.display_name || member.username || '?')[0].toUpperCase()}<i className={onlineUserIds.has(member.user_id) ? 'online' : ''} /></div><div className="server-member-meta"><b>{member.display_name || member.username}</b><small>{member.role === 'owner' ? 'Владелец' : member.role === 'admin' ? 'Администратор' : member.role === 'moderator' ? 'Модератор' : 'Участник'}</small></div>{['owner','admin'].includes(servers.find(item => item.id === selectedServerId)?.role) && member.role !== 'owner' && <select className="server-role-select" value={member.role} onChange={event => changeServerMemberRole(member,event.target.value)} aria-label="Роль участника">{servers.find(item => item.id === selectedServerId)?.role === 'owner' && <option value="owner">Владелец</option>}<option value="admin">Администратор</option><option value="moderator">Модератор</option><option value="member">Участник</option></select>}{['owner','admin','moderator'].includes(servers.find(item => item.id === selectedServerId)?.role) && member.role !== 'owner' && member.user_id !== session.user.id && <button type="button" className="server-kick-button" onClick={() => removeServerMember(member)} aria-label="Исключить участника">×</button>}</div>)}
               </aside>
             </div>}
           </>}
