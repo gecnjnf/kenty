@@ -722,7 +722,7 @@ export default function App() {
     if (track.kind === Track.Kind.Video) {
       const stream = new MediaStream([track.mediaStreamTrack]);
       setRemoteVideoStreams(current => ({ ...current, [participant.identity]: stream }));
-      if (publication.source === liveKitSdk.Track.Source.ScreenShare) {
+      if (publication.source === Track.Source.ScreenShare) {
         setRemoteScreenShares(current => ({ ...current, [participant.identity]: true }));
       }
     }
@@ -748,7 +748,7 @@ export default function App() {
         }
         return next;
       });
-      if (publication.source === liveKitSdk.Track.Source.ScreenShare) {
+      if (publication.source === Track.Source.ScreenShare) {
         setRemoteScreenShares(current => ({ ...current, [participant.identity]: false }));
       }
     }
@@ -821,7 +821,7 @@ export default function App() {
         .on(liveKitSdk.RoomEvent.ActiveSpeakersChanged, updateVoiceParticipants)
         .on(liveKitSdk.RoomEvent.LocalTrackUnpublished, publication => {
           if (publication.source === liveKitSdk.Track.Source.Camera) setCameraEnabled(false);
-          if (publication.source === liveKitSdk.Track.Source.ScreenShare) setScreenSharing(false);
+          if (publication.source === Track.Source.ScreenShare) setScreenSharing(false);
           updateVoiceParticipants();
         })
         .on(liveKitSdk.RoomEvent.ConnectionStateChanged, state => {
