@@ -1098,6 +1098,9 @@ export default function App() {
       if (!accessToken) throw new Error('Сессия закончилась. Войди в KENTY заново.');
 
       const roomName = activeServerVoice ? 'server:' + activeServerVoice.serverId + ':' + activeServerVoice.channelId : (activeVoiceOwner?.id || session.user.id) + ':' + selectedRoom.id;
+      if (window.location.hostname.endsWith('.github.io') && !import.meta.env.VITE_TOKEN_ENDPOINT) {
+        throw new Error('Голосовой сервер ещё не подключён к публичной версии. Текстовые чаты и серверы уже доступны.');
+      }
       const tokenResponse = await fetch(import.meta.env.VITE_TOKEN_ENDPOINT || '/api/token', {
         method: 'POST',
         cache: 'no-store',
