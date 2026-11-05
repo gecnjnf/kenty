@@ -282,8 +282,8 @@ export default function Communities({ session, onNotice, onError }) {
                     {messages.map(item => {
                       const person = people[item.sender_id];
                       return <article className="community-message" key={item.id}>
-                        <div className="community-message-avatar">{person?.avatar_url ? <img src={person.avatar_url} alt="" /> : (person?.display_name || person?.username || '?').slice(0, 1).toUpperCase()}</div>
-                        <div><div className="community-message-meta"><b>{person?.display_name || person?.username || 'Участник'}</b><time>{formatTime(item.created_at)}</time></div><p>{item.content}</p></div>
+                        <div className="community-message-avatar">{person?.avatar_url ? <img src={person.avatar_url} alt="" /> : (person?.display_name || person?.username || (item.sender_id === userId ? 'Я' : '?')).slice(0, 1).toUpperCase()}</div>
+                        <div><div className="community-message-meta"><b>{person?.display_name || person?.username || (item.sender_id === userId ? 'Ты' : 'Участник')}</b><time>{formatTime(item.created_at)}</time></div><p>{item.content}</p></div>
                       </article>;
                     })}
                     {!messages.length && <p className="communities-empty-chat">Здесь пока тихо. Напиши первое сообщение 👋</p>}
