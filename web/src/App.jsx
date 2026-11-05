@@ -376,7 +376,7 @@ export default function App() {
 
   async function createServerChannel(event) {
     event.preventDefault();
-    const name = channelNameDraft.trim().toLowerCase().replace(/\\s+/g, '-');
+    const name = channelNameDraft.trim().toLowerCase().replace(/\s+/g, '-');
     const currentServer = servers.find(item => item.id === selectedServerId);
     if (!currentServer || !name || serverBusy) return;
     if (!['owner','admin','moderator'].includes(currentServer.role)) {
@@ -872,7 +872,7 @@ export default function App() {
     const conversationId = selectedConversation.id;
     const { data: sent, error: err } = await supabase.from('messages').insert({
       conversation_id: conversationId, sender_id: session.user.id, content: text
-    }).select('id,sender_id,content,created_at').single();
+    }).select('id,sender_id,content,created_at,edited_at').single();
     if (err) {
       setError('Не удалось отправить сообщение: ' + err.message);
     } else {
