@@ -835,6 +835,15 @@ export default function App() {
             setVoiceError('');
           }
         })
+        .on(liveKitSdk.RoomEvent.Reconnecting, () => {
+          setVoiceStatus('Соединение прервалось. KENTY пытается восстановить связь…');
+          setVoiceError('');
+        })
+        .on(liveKitSdk.RoomEvent.Reconnected, () => {
+          setVoiceStatus('Соединение восстановлено');
+          setVoiceError('');
+          updateVoiceParticipants();
+        })
         .on(liveKitSdk.RoomEvent.Disconnected, () => {
           setConnected(false);
           setMicEnabled(false);
@@ -843,6 +852,12 @@ export default function App() {
           setParticipants([]);
           setRemoteVideoStreams({});
           setRemoteScreenShares({});
+          audioElementsRef.current.forEach(element => {
+            element.pause?.();
+            element.srcObject = null;
+            element.remove();
+          });
+          audioElementsRef.current.clear();
         });
 
       await room.prepareConnection(tokenData.serverUrl, tokenData.participantToken).catch(() => {});
@@ -1205,7 +1220,7 @@ export default function App() {
               {(cameraEnabled || screenSharing) && <div className="voice-video-tile local-video-tile"><video ref={localVideoRef} autoPlay playsInline muted /><span>{screenSharing ? 'Ты · демонстрация экрана' : 'Ты · камера включена'}</span></div>}
               {Object.entries(remoteVideoStreams).map(([peerId, stream]) => <div className="voice-video-tile" key={peerId}><video autoPlay playsInline ref={element => { if (element && element.srcObject !== stream) element.srcObject = stream; }} /><span>{remoteScreenShares[peerId] ? '🖥 Демонстрация экрана · ' : ''}{participants.find(person => person.id === peerId)?.name || 'Участник'}</span></div>)}
             </div><div className="participant-heading">УЧАСТНИКИ · {participants.length}</div><div className="participant-list">{participants.map(p => <div className="participant" key={p.id}><div className="participant-avatar">{p.name[0]?.toUpperCase()}</div><div className="participant-name"><b>{p.name}{p.local ? ' (ты)' : ''}</b><small>{p.speaking ? 'Говорит' : 'На связи'}</small></div><span className="mic-state">{p.muted ? 'Микрофон выкл.' : 'Микрофон вкл.'}</span></div>)}</div><div className="voice-controls"><button type="button" className={"control-button " + (!micEnabled ? "control-muted" : "")} aria-pressed={micEnabled} onClick={toggleMic}>{micEnabled ? '🎙 Выключить микрофон' : '🔇 Включить микрофон'}</button><button type="button" className={"control-button voice-camera-button " + (cameraEnabled ? "camera-live-active" : "")} aria-pressed={cameraEnabled} onClick={toggleVoiceCamera}>{cameraEnabled ? '📷 Выключить камеру' : '📷 Включить камеру'}</button><button type="button" className={"control-button screen-share-button " + (screenSharing ? "camera-live-active" : "")} aria-pressed={screenSharing} onClick={toggleScreenShare}>{screenSharing ? "⏹ Остановить показ" : "🖥 Показать экран"}</button>{cameraEnabled && <button type="button" className="control-button voice-camera-switch" onClick={switchVoiceCamera} disabled={voiceCameraSwitching}>{voiceCameraSwitching ? "⏳ Переключаем…" : "🔄 Перевернуть камеру"}</button>}<button type="button" className={"control-button noise-live-button " + (noiseSuppression ? "noise-live-active" : "")} aria-pressed={noiseSuppression} onClick={toggleNoiseSuppression}>✦ Шумоподавление: {noiseSuppression ? 'ВКЛ' : 'ВЫКЛ'}</button><button className="leave-button" onClick={leaveVoiceRoom}>Выйти из комнаты</button></div></section>}
-          <div className="status-line">{voiceStatus}</div><div className="alpha-note">Голос идёт напрямую между участниками через WebRTC. Комнаты доступны владельцу и принятым друзьям.</div><div className="audio-bin" ref={audioRef} />
+          <div className="status-line">{voiceStatus}</div><div className="alpha-note">Голос передаётся через LiveKit SFU. Комнаты доступны владельцу и принятым друзьям.</div><div className="audio-bin" ref={audioRef} />
         </div>}
       </section>
       {cameraOpen && <div className="camera-overlay" role="dialog" aria-modal="true" aria-label="Камера KENTY">
