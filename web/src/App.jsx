@@ -38,6 +38,7 @@ export default function App() {
   const activeConversationIdRef = useRef(null);
   const messageLoadRequestRef = useRef(0);
   const [message, setMessage] = useState('');
+  const [chatSearch, setChatSearch] = useState('');
   const [editingMessageId, setEditingMessageId] = useState('');
   const [editingMessageContent, setEditingMessageContent] = useState('');
   const [busy, setBusy] = useState(false);
@@ -437,6 +438,9 @@ export default function App() {
 
   useEffect(() => {
     const conversationId = selectedConversation?.id;
+    const draftKey = conversationId && session?.user?.id ? `kenty-draft:${session.user.id}:${conversationId}` : '';
+    setMessage(draftKey ? (localStorage.getItem(draftKey) || '') : '');
+    setChatSearch('');
     activeConversationIdRef.current = conversationId || null;
     messageLoadRequestRef.current += 1;
     setMessages([]);
@@ -702,6 +706,7 @@ export default function App() {
       setError('Не удалось отправить сообщение: ' + err.message);
     } else {
       setMessage('');
+      localStorage.removeItem(`kenty-draft:${session.user.id}:${conversationId}`);
       if (sent && activeConversationIdRef.current === conversationId) {
         setMessages(current => {
           const merged = new Map(current.map(item => [item.id, item]));
@@ -711,6 +716,15 @@ export default function App() {
             .slice(-100);
         });
       }
+    }
+  }
+
+  async function copyMessage(content) {
+    try {
+      await navigator.clipboard.writeText(content);
+      setNotice('Сообщение скопировано.');
+    } catch {
+      setError('Не удалось скопировать. Проверь разрешение браузера на буфер обмена.');
     }
   }
 
@@ -1293,8 +1307,8 @@ export default function App() {
         {tab === 'chat' && <div className="chat-content">
           {!selectedConversation ? <div className="empty-state chat-empty"><h2>Твои сообщения</h2><p>Добавь друга и нажми «Написать», чтобы начать личную переписку.</p></div> : <>
             <div className="chat-welcome"><div className="chat-welcome-icon">#</div><h1>{selectedConversation.person?.display_name || selectedConversation.person?.username}</h1><p>Личная переписка KENTY</p></div>
-            <div className="chat-messages">{messages.map(m => <article className={"chat-message " + (m.sender_id === session.user.id ? "message-own" : "message-other")} key={m.id}><div className="message-avatar">{m.sender_id === session.user.id ? (profile?.avatar_url ? <img src={profile.avatar_url} alt="" /> : (profile?.username || 'Я')[0].toUpperCase()) : (selectedConversation.person?.avatar_url ? <img src={selectedConversation.person.avatar_url} alt="" /> : (selectedConversation.person?.username || 'Д')[0].toUpperCase())}</div><div><b>{m.sender_id === session.user.id ? 'Ты' : selectedConversation.person?.display_name || selectedConversation.person?.username}</b>{getImagePath(m.content) ? <button type="button" className="chat-image-open" onClick={() => imageUrls[m.id] && setExpandedImage(imageUrls[m.id])} disabled={!imageUrls[m.id]} aria-label="Открыть фотографию">{imageUrls[m.id] ? <img className="chat-image-message" src={imageUrls[m.id]} alt="Фотография из переписки" loading="lazy" /> : <span className="chat-image-loading">Загружаем фотографию…</span>}</button> : editingMessageId === m.id ? <form className="message-edit-form" onSubmit={event => saveMessageEdit(event, m.id)}><textarea value={editingMessageContent} onChange={event => setEditingMessageContent(event.target.value)} maxLength={10000} rows={2} autoFocus /><button type="submit">Сохранить</button><button type="button" onClick={() => { setEditingMessageId(''); setEditingMessageContent(''); }}>Отмена</button></form> : <p>{m.content}</p>}<time className="message-time" dateTime={m.created_at}>{formatMessageTime(m.created_at)}{m.edited_at ? ' · изменено' : ''}</time>{m.sender_id === session.user.id && <div className="message-actions">{!getImagePath(m.content) && editingMessageId !== m.id && <button type="button" onClick={() => { setEditingMessageId(m.id); setEditingMessageContent(m.content); }}>Изменить</button>}<button type="button" onClick={() => deleteMessage(m.id)}>Удалить</button></div>}</div></article>)}{!messages.length && <p className="chat-no-messages">Пока тихо. Отправь первое сообщение 👋</p>}<div ref={messagesEndRef} /></div>
-            <form className="chat-composer" onSubmit={sendMessage}><button type="button" className="chat-camera-button" onClick={openChatCamera} aria-label="Открыть камеру" title="Сделать фото">📷</button><input value={message} onChange={e => setMessage(e.target.value)} placeholder="Написать сообщение…" /><button type="submit">Отправить</button></form>
+            <div className="chat-search"><span>⌕</span><input type="search" value={chatSearch} onChange={e => setChatSearch(e.target.value)} placeholder="Поиск в этой переписке…" aria-label="Поиск сообщений в переписке" /><small>{messages.filter(m => !chatSearch.trim() || (m.content || '').toLocaleLowerCase().includes(chatSearch.trim().toLocaleLowerCase())).length}</small></div><div className="chat-messages">{messages.filter(m => !chatSearch.trim() || (m.content || '').toLocaleLowerCase().includes(chatSearch.trim().toLocaleLowerCase())).map(m => <article className={"chat-message " + (m.sender_id === session.user.id ? "message-own" : "message-other")} key={m.id}><div className="message-avatar">{m.sender_id === session.user.id ? (profile?.avatar_url ? <img src={profile.avatar_url} alt="" /> : (profile?.username || 'Я')[0].toUpperCase()) : (selectedConversation.person?.avatar_url ? <img src={selectedConversation.person.avatar_url} alt="" /> : (selectedConversation.person?.username || 'Д')[0].toUpperCase())}</div><div><b>{m.sender_id === session.user.id ? 'Ты' : selectedConversation.person?.display_name || selectedConversation.person?.username}</b>{getImagePath(m.content) ? <button type="button" className="chat-image-open" onClick={() => imageUrls[m.id] && setExpandedImage(imageUrls[m.id])} disabled={!imageUrls[m.id]} aria-label="Открыть фотографию">{imageUrls[m.id] ? <img className="chat-image-message" src={imageUrls[m.id]} alt="Фотография из переписки" loading="lazy" /> : <span className="chat-image-loading">Загружаем фотографию…</span>}</button> : editingMessageId === m.id ? <form className="message-edit-form" onSubmit={event => saveMessageEdit(event, m.id)}><textarea value={editingMessageContent} onChange={event => setEditingMessageContent(event.target.value)} maxLength={10000} rows={2} autoFocus /><button type="submit">Сохранить</button><button type="button" onClick={() => { setEditingMessageId(''); setEditingMessageContent(''); }}>Отмена</button></form> : <p>{m.content}</p>}<time className="message-time" dateTime={m.created_at}>{formatMessageTime(m.created_at)}{m.edited_at ? ' · изменено' : ''}</time>{!getImagePath(m.content) && editingMessageId !== m.id && <div className="message-actions"><button type="button" onClick={() => copyMessage(m.content)}>Копировать</button>{m.sender_id === session.user.id && <><button type="button" onClick={() => { setEditingMessageId(m.id); setEditingMessageContent(m.content); }}>Изменить</button><button type="button" onClick={() => deleteMessage(m.id)}>Удалить</button></>}</div>}</div></article>)}{!messages.length && <p className="chat-no-messages">Пока тихо. Отправь первое сообщение 👋</p>}<div ref={messagesEndRef} /></div>
+            <form className="chat-composer" onSubmit={sendMessage}><button type="button" className="chat-camera-button" onClick={openChatCamera} aria-label="Открыть камеру" title="Сделать фото">📷</button><input value={message} onChange={e => { setMessage(e.target.value); if (selectedConversation?.id && session?.user?.id) localStorage.setItem(`kenty-draft:${session.user.id}:${selectedConversation.id}`, e.target.value); }} maxLength={10000} placeholder="Написать сообщение…" /><button type="submit">Отправить</button></form>
           </>}
         </div>}
 
