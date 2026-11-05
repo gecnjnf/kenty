@@ -57,6 +57,8 @@ export default function App() {
   const activeConversationIdRef = useRef(null);
   const messageLoadRequestRef = useRef(0);
   const [message, setMessage] = useState('');
+  const [editingMessageId, setEditingMessageId] = useState('');
+  const [editingMessageContent, setEditingMessageContent] = useState('');
   const [busy, setBusy] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [cameraFacing, setCameraFacing] = useState('environment');
@@ -426,6 +428,15 @@ export default function App() {
             .slice(-100);
         });
       })
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'messages',
+        filter: 'conversation_id=eq.' + conversationId
+      }, ({ new: updated }) => {
+        if (!active || activeConversationIdRef.current !== conversationId || !updated?.id) return;
+        setMessages(current => current.map(item => item.id === updated.id ? updated : item));
+      })
       .subscribe(status => {
         if (active && status === 'SUBSCRIBED') loadMessages(conversationId);
         if (active && status === 'CHANNEL_ERROR') {
@@ -541,7 +552,7 @@ export default function App() {
   async function loadMessages(id) {
     const requestId = ++messageLoadRequestRef.current;
     const { data, error: err } = await supabase.from('messages')
-      .select('id,sender_id,content,created_at')
+      .select('id,sender_id,content,created_at,edited_at')
       .eq('conversation_id', id)
       .order('created_at', { ascending: false })
       .limit(100);
@@ -626,7 +637,7 @@ export default function App() {
         conversation_id: conversationId,
         sender_id: session.user.id,
         content: IMAGE_MESSAGE_PREFIX + path
-      }).select('id,sender_id,content,created_at').single();
+      }).select('id,sender_id,content,created_at,edited_at').single();
       if (messageError) {
         await supabase.storage.from('chat-media').remove([path]);
         throw messageError;
@@ -655,7 +666,7 @@ export default function App() {
     const conversationId = selectedConversation.id;
     const { data: sent, error: err } = await supabase.from('messages').insert({
       conversation_id: conversationId, sender_id: session.user.id, content: text
-    }).select('id,sender_id,content,created_at').single();
+    }).select('id,sender_id,content,created_at,edited_at').single();
     if (err) {
       setError('Не удалось отправить сообщение: ' + err.message);
     } else {
@@ -670,6 +681,34 @@ export default function App() {
         });
       }
     }
+  }
+
+  async function saveMessageEdit(event, id) {
+    event.preventDefault();
+    const content = editingMessageContent.trim();
+    if (!content || content.length > 10000) return;
+    const { data, error: editError } = await supabase.from('messages')
+      .update({ content, edited_at: new Date().toISOString() })
+      .eq('id', id).eq('sender_id', session.user.id)
+      .select('id,sender_id,content,created_at,edited_at').single();
+    if (editError) {
+      setError('Не удалось изменить сообщение: ' + editError.message);
+      return;
+    }
+    setMessages(current => current.map(item => item.id === id ? data : item));
+    setEditingMessageId('');
+    setEditingMessageContent('');
+  }
+
+  async function deleteMessage(id) {
+    if (!window.confirm('Удалить это сообщение?')) return;
+    const { error: deleteError } = await supabase.from('messages')
+      .delete().eq('id', id).eq('sender_id', session.user.id);
+    if (deleteError) {
+      setError('Не удалось удалить сообщение: ' + deleteError.message);
+      return;
+    }
+    setMessages(current => current.filter(item => item.id !== id));
   }
 
   function personForFriendship(f) { return f.person || { username: 'Пользователь', display_name: 'Пользователь' }; }
@@ -1181,7 +1220,7 @@ export default function App() {
         {tab === 'chat' && <div className="chat-content">
           {!selectedConversation ? <div className="empty-state chat-empty"><h2>Твои сообщения</h2><p>Добавь друга и нажми «Написать», чтобы начать личную переписку.</p></div> : <>
             <div className="chat-welcome"><div className="chat-welcome-icon">#</div><h1>{selectedConversation.person?.display_name || selectedConversation.person?.username}</h1><p>Личная переписка KENTY</p></div>
-            <div className="chat-messages">{messages.map(m => <article className={"chat-message " + (m.sender_id === session.user.id ? "message-own" : "message-other")} key={m.id}><div className="message-avatar">{m.sender_id === session.user.id ? (profile?.avatar_url ? <img src={profile.avatar_url} alt="" /> : (profile?.username || 'Я')[0].toUpperCase()) : (selectedConversation.person?.avatar_url ? <img src={selectedConversation.person.avatar_url} alt="" /> : (selectedConversation.person?.username || 'Д')[0].toUpperCase())}</div><div><b>{m.sender_id === session.user.id ? 'Ты' : selectedConversation.person?.display_name || selectedConversation.person?.username}</b>{getImagePath(m.content) ? <button type="button" className="chat-image-open" onClick={() => imageUrls[m.id] && setExpandedImage(imageUrls[m.id])} disabled={!imageUrls[m.id]} aria-label="Открыть фотографию">{imageUrls[m.id] ? <img className="chat-image-message" src={imageUrls[m.id]} alt="Фотография из переписки" loading="lazy" /> : <span className="chat-image-loading">Загружаем фотографию…</span>}</button> : <p>{m.content}</p>}<time className="message-time" dateTime={m.created_at}>{formatMessageTime(m.created_at)}</time></div></article>)}{!messages.length && <p className="chat-no-messages">Пока тихо. Отправь первое сообщение 👋</p>}<div ref={messagesEndRef} /></div>
+            <div className="chat-messages">{messages.map(m => <article className={"chat-message " + (m.sender_id === session.user.id ? "message-own" : "message-other")} key={m.id}><div className="message-avatar">{m.sender_id === session.user.id ? (profile?.avatar_url ? <img src={profile.avatar_url} alt="" /> : (profile?.username || 'Я')[0].toUpperCase()) : (selectedConversation.person?.avatar_url ? <img src={selectedConversation.person.avatar_url} alt="" /> : (selectedConversation.person?.username || 'Д')[0].toUpperCase())}</div><div><b>{m.sender_id === session.user.id ? 'Ты' : selectedConversation.person?.display_name || selectedConversation.person?.username}</b>{getImagePath(m.content) ? <button type="button" className="chat-image-open" onClick={() => imageUrls[m.id] && setExpandedImage(imageUrls[m.id])} disabled={!imageUrls[m.id]} aria-label="Открыть фотографию">{imageUrls[m.id] ? <img className="chat-image-message" src={imageUrls[m.id]} alt="Фотография из переписки" loading="lazy" /> : <span className="chat-image-loading">Загружаем фотографию…</span>}</button> : editingMessageId === m.id ? <form className="message-edit-form" onSubmit={event => saveMessageEdit(event, m.id)}><textarea value={editingMessageContent} onChange={event => setEditingMessageContent(event.target.value)} maxLength={10000} rows={2} autoFocus /><button type="submit">Сохранить</button><button type="button" onClick={() => { setEditingMessageId(''); setEditingMessageContent(''); }}>Отмена</button></form> : <p>{m.content}</p>}<time className="message-time" dateTime={m.created_at}>{formatMessageTime(m.created_at)}{m.edited_at ? ' · изменено' : ''}</time>{m.sender_id === session.user.id && <div className="message-actions">{!getImagePath(m.content) && editingMessageId !== m.id && <button type="button" onClick={() => { setEditingMessageId(m.id); setEditingMessageContent(m.content); }}>Изменить</button>}<button type="button" onClick={() => deleteMessage(m.id)}>Удалить</button></div>}</div></article>)}{!messages.length && <p className="chat-no-messages">Пока тихо. Отправь первое сообщение 👋</p>}<div ref={messagesEndRef} /></div>
             <form className="chat-composer" onSubmit={sendMessage}><button type="button" className="chat-camera-button" onClick={openChatCamera} aria-label="Открыть камеру" title="Сделать фото">📷</button><input value={message} onChange={e => setMessage(e.target.value)} placeholder="Написать сообщение…" /><button type="submit">Отправить</button></form>
           </>}
         </div>}
