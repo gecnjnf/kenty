@@ -1526,3 +1526,58 @@ body, .app-shell { background: #09090d; }
 .voice-camera-button.camera-live-active{color:#fff0e9;border-color:#ff654b;background:linear-gradient(120deg,rgba(255,58,43,.28),rgba(255,119,24,.18));box-shadow:0 0 0 1px rgba(255,90,57,.12),0 6px 20px rgba(255,65,42,.12)}
 @media(max-width:640px){.voice-video-grid{grid-template-columns:repeat(auto-fit,minmax(min(100%,145px),1fr));gap:8px;margin-bottom:16px}.voice-video-tile{aspect-ratio:4/3;border-radius:12px}}
 :root[data-theme="light"] .voice-video-tile{background:linear-gradient(145deg,#f6e9e4,#fff8f5);border-color:rgba(220,84,56,.28)}
+
+
+/* KENTY 2.0 — warm ember visual system */
+:root[data-accent="ember"] {
+  --accent: #ff6847;
+  --accent-strong: #ff4f36;
+  --accent-soft: rgba(255, 104, 71, .16);
+}
+:root[data-accent="ember"] .primary-button,
+:root[data-accent="ember"] .auth-submit,
+:root[data-accent="ember"] .download-main-button,
+:root[data-accent="ember"] .small-action {
+  background: linear-gradient(135deg,#ff7950,#e94c35);
+  box-shadow: 0 9px 24px rgba(239,82,53,.22);
+}
+:root[data-accent="ember"] .brand-mark,
+:root[data-accent="ember"] .hero-monogram,
+:root[data-accent="ember"] .download-card-icon {
+  background: linear-gradient(145deg,#ff8758,#cf392f);
+  box-shadow: 0 8px 26px rgba(236,79,52,.24);
+}
+:root[data-accent="ember"] .nav-item.selected {
+  background: linear-gradient(100deg,rgba(255,104,71,.2),rgba(180,61,48,.08));
+  border-color: rgba(255,126,91,.24);
+  box-shadow: inset 2px 0 #ff7654,0 8px 24px rgba(0,0,0,.12);
+}
+:root[data-accent="ember"] .topbar-title .hash,
+:root[data-accent="ember"] .eyebrow,
+:root[data-accent="ember"] .search-panel-icon { color:#ff9a78; }
+:root[data-accent="ember"] .friends-hero {
+  border-color:rgba(255,126,91,.25);
+  background:linear-gradient(110deg,rgba(72,35,39,.98),rgba(39,29,39,.97) 58%,rgba(38,39,49,.96));
+}
+:root[data-accent="ember"] .friends-hero-glow { background:#ff6847; }
+:root[data-accent="ember"] .hero-monogram { text-shadow:0 5px 18px #6e251f; }
+:root[data-accent="ember"] .section-heading-mark { border-color:#66413d;background:#302327;color:#ff9a78; }
+:root[data-accent="ember"] .search-panel { border-color:rgba(255,126,91,.2); }
+:root[data-accent="ember"] .accent-ember i { background:linear-gradient(135deg,#ff8758,#cf392f); }
+:root[data-accent="ember"] .accent-ember { border-color:rgba(255,126,91,.6);color:#ffb39a; }
+.message-body { min-width:0; flex:1; }
+.message-heading { display:flex; align-items:baseline; flex-wrap:wrap; gap:9px; }
+.message-heading .message-time { margin-left:0; }
+.message-actions { display:flex; gap:10px; margin-top:5px; opacity:.72; }
+.message-actions button { border:0; padding:2px 0; background:transparent; color:#969bad; font-size:10px; }
+.message-actions button:hover { color:#ff9278; }
+.message-edit-box { display:grid; gap:8px; margin-top:7px; }
+.message-edit-box textarea { width:min(100%,560px); min-height:64px; resize:vertical; padding:10px 12px; color:#f4f2f2; background:#15171e; border:1px solid #5a4140; border-radius:10px; font:inherit; font-size:13px; }
+.message-edit-box div { display:flex; gap:8px; }
+.message-edit-box button { border:0; border-radius:8px; padding:7px 12px; background:linear-gradient(135deg,#ff7950,#e94c35); color:white; font-size:11px; font-weight:700; }
+.message-edit-box .message-cancel-edit { background:#30323b; color:#d2d3dc; }
+:root[data-theme="light"] .message-edit-box textarea { background:#fff;color:#252630;border-color:#e7b2a4; }
+@media(max-width:640px) {
+  .message-actions { opacity:1; }
+  .message-actions button { min-height:28px; padding:5px 3px; }
+}
