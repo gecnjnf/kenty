@@ -39,6 +39,19 @@ export default function App() {
   const [isInstalled, setIsInstalled] = useState(() => window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone === true);
   const [error, setError] = useState('');
   const [tab, setTab] = useState('friends');
+  const [servers, setServers] = useState([]);
+  const [selectedServerId, setSelectedServerId] = useState('');
+  const [serverChannels, setServerChannels] = useState([]);
+  const [selectedChannelId, setSelectedChannelId] = useState('');
+  const [channelMessages, setChannelMessages] = useState([]);
+  const [channelMessage, setChannelMessage] = useState('');
+  const [serverNameDraft, setServerNameDraft] = useState('');
+  const [channelNameDraft, setChannelNameDraft] = useState('');
+  const [inviteCodeDraft, setInviteCodeDraft] = useState('');
+  const [showServerCreate, setShowServerCreate] = useState(false);
+  const [showChannelCreate, setShowChannelCreate] = useState(false);
+  const [serverBusy, setServerBusy] = useState(false);
+  const [pendingInviteCode, setPendingInviteCode] = useState(() => new URLSearchParams(window.location.search).get('invite') || '');
   const [theme, setTheme] = useState(() => localStorage.getItem('kenty-theme') || 'dark');
   const [accentTheme, setAccentTheme] = useState(() => localStorage.getItem('kenty-accent') || 'ember');
   const [avatarBusy, setAvatarBusy] = useState(false);
@@ -168,6 +181,7 @@ export default function App() {
     if (!session?.user) { setProfile(null); return; }
     loadProfile();
     loadSocial();
+    loadServers();
   }, [session?.user?.id]);
 
   useEffect(() => {
@@ -316,6 +330,130 @@ export default function App() {
     }));
   }
 
+  async function loadServers() {
+    if (!session?.user?.id) return;
+    const { data, error: loadError } = await supabase.from('server_members')
+      .select('server_id,role,joined_at,server:servers(id,name,description,icon_url,owner_id,created_at)')
+      .eq('user_id', session.user.id)
+      .order('joined_at', { ascending: false });
+    if (loadError) { setError('Не удалось загрузить серверы: ' + loadError.message); return; }
+    const items = (data || []).map(item => ({ ...item.server, role: item.role })).filter(item => item.id);
+    setServers(items);
+    setSelectedServerId(current => items.some(item => item.id === current) ? current : (items[0]?.id || ''));
+  }
+
+  async function createServer(event) {
+    event.preventDefault();
+    const name = serverNameDraft.trim();
+    if (name.length < 2 || name.length > 64 || serverBusy) return;
+    setServerBusy(true);
+    try {
+      const { data: created, error: createError } = await supabase.from('servers')
+        .insert({ name, owner_id: session.user.id })
+        .select('id,name,description,icon_url,owner_id,created_at')
+        .single();
+      if (createError) throw createError;
+      const { error: memberError } = await supabase.from('server_members')
+        .insert({ server_id: created.id, user_id: session.user.id, role: 'owner' });
+      if (memberError) {
+        await supabase.from('servers').delete().eq('id', created.id);
+        throw memberError;
+      }
+      const { error: channelError } = await supabase.from('channels').insert({
+        server_id: created.id, name: 'общий', channel_type: 'text', created_by: session.user.id, position: 0
+      });
+      if (channelError) throw channelError;
+      setServerNameDraft('');
+      setShowServerCreate(false);
+      await loadServers();
+      setSelectedServerId(created.id);
+      setTab('server');
+      setNotice('Сервер «' + name + '» создан. Пригласи друзей!');
+    } catch (createError) {
+      setError('Не удалось создать сервер: ' + (createError.message || 'ошибка'));
+    } finally { setServerBusy(false); }
+  }
+
+  async function createServerChannel(event) {
+    event.preventDefault();
+    const name = channelNameDraft.trim().toLowerCase().replace(/\\s+/g, '-');
+    const currentServer = servers.find(item => item.id === selectedServerId);
+    if (!currentServer || !name || serverBusy) return;
+    if (!['owner','admin','moderator'].includes(currentServer.role)) {
+      setError('Создавать каналы могут только модераторы и администраторы.');
+      return;
+    }
+    setServerBusy(true);
+    try {
+      const { data, error: channelError } = await supabase.from('channels').insert({
+        server_id: selectedServerId, name, channel_type: 'text', created_by: session.user.id, position: serverChannels.length
+      }).select('id,server_id,name,channel_type,topic,position,created_at').single();
+      if (channelError) throw channelError;
+      setServerChannels(current => [...current, data]);
+      setSelectedChannelId(data.id);
+      setChannelNameDraft('');
+      setShowChannelCreate(false);
+      setTab('server');
+    } catch (createError) {
+      setError('Не удалось создать канал: ' + (createError.message || 'ошибка'));
+    } finally { setServerBusy(false); }
+  }
+
+  async function joinServerWithCode(event) {
+    event.preventDefault();
+    const code = inviteCodeDraft.trim();
+    if (!code || serverBusy) return;
+    setServerBusy(true);
+    try {
+      const { data, error: joinError } = await supabase.rpc('join_server_by_invite', { invite_code: code });
+      if (joinError) throw joinError;
+      setInviteCodeDraft('');
+      await loadServers();
+      setSelectedServerId(data);
+      setTab('server');
+      setNotice('Ты присоединился к серверу!');
+    } catch (joinError) {
+      setError(joinError.message || 'Не удалось использовать приглашение.');
+    } finally { setServerBusy(false); }
+  }
+
+  async function createServerInvite() {
+    const currentServer = servers.find(item => item.id === selectedServerId);
+    if (!currentServer || !['owner','admin','moderator'].includes(currentServer.role)) return;
+    setServerBusy(true);
+    try {
+      const { data, error: inviteError } = await supabase.from('server_invites')
+        .insert({ server_id: selectedServerId, created_by: session.user.id })
+        .select('code')
+        .single();
+      if (inviteError) throw inviteError;
+      const inviteUrl = window.location.origin + '/?invite=' + encodeURIComponent(data.code);
+      try {
+        await navigator.clipboard.writeText(inviteUrl);
+        setNotice('Ссылка-приглашение скопирована: ' + inviteUrl);
+      } catch {
+        setNotice('Ссылка-приглашение: ' + inviteUrl);
+      }
+    } catch (inviteError) {
+      setError('Не удалось создать приглашение: ' + (inviteError.message || 'ошибка'));
+    } finally { setServerBusy(false); }
+  }
+
+  async function sendChannelMessage(event) {
+    event.preventDefault();
+    const content = channelMessage.trim();
+    if (!content || !selectedChannelId || content.length > 10000) return;
+    const { data, error: sendError } = await supabase.from('channel_messages')
+      .insert({ channel_id: selectedChannelId, sender_id: session.user.id, content })
+      .select('id,channel_id,sender_id,content,created_at,edited_at')
+      .single();
+    if (sendError) setError('Не удалось отправить сообщение: ' + sendError.message);
+    else {
+      setChannelMessage('');
+      setChannelMessages(current => [...current.filter(item => item.id !== data.id), data].slice(-100));
+    }
+  }
+
   async function submitAuth(e) {
     e.preventDefault(); setError(''); setNotice(''); setAuthBusy(true);
     try {
@@ -403,6 +541,71 @@ export default function App() {
     } catch (e) { setError(e.message || 'Не удалось открыть переписку.'); }
     finally { setBusy(false); }
   }
+
+  useEffect(() => {
+    const serverId = selectedServerId;
+    if (!serverId) { setServerChannels([]); setSelectedChannelId(''); return undefined; }
+    let active = true;
+    (async () => {
+      const { data, error: loadError } = await supabase.from('channels')
+        .select('id,server_id,name,channel_type,topic,position,created_at')
+        .eq('server_id', serverId)
+        .order('position', { ascending: true });
+      if (!active) return;
+      if (loadError) { setError('Не удалось загрузить каналы: ' + loadError.message); return; }
+      setServerChannels(data || []);
+      setSelectedChannelId(current => (data || []).some(channel => channel.id === current) ? current : (data?.[0]?.id || ''));
+    })();
+    return () => { active = false; };
+  }, [selectedServerId]);
+
+  useEffect(() => {
+    const channelId = selectedChannelId;
+    if (!channelId) { setChannelMessages([]); return undefined; }
+    let active = true;
+    const load = async () => {
+      const { data, error: loadError } = await supabase.from('channel_messages')
+        .select('id,channel_id,sender_id,content,created_at,edited_at')
+        .eq('channel_id', channelId)
+        .order('created_at', { ascending: true })
+        .limit(100);
+      if (!active) return;
+      if (loadError) { setError('Не удалось загрузить сообщения канала: ' + loadError.message); return; }
+      setChannelMessages(data || []);
+    };
+    const realtime = supabase.channel('kenty:server-channel:' + channelId)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'channel_messages', filter: 'channel_id=eq.' + channelId }, payload => {
+        if (!active) return;
+        if (payload.eventType === 'INSERT' && payload.new?.id) {
+          setChannelMessages(current => [...current.filter(item => item.id !== payload.new.id), payload.new].slice(-100));
+        } else if (payload.eventType === 'UPDATE' && payload.new?.id) {
+          setChannelMessages(current => current.map(item => item.id === payload.new.id ? payload.new : item));
+        } else if (payload.eventType === 'DELETE' && payload.old?.id) {
+          setChannelMessages(current => current.filter(item => item.id !== payload.old.id));
+        }
+      })
+      .subscribe(status => { if (status === 'SUBSCRIBED') load(); });
+    return () => { active = false; supabase.removeChannel(realtime); };
+  }, [selectedChannelId]);
+
+  useEffect(() => {
+    if (!session?.user?.id || !pendingInviteCode) return undefined;
+    let active = true;
+    (async () => {
+      const { data, error: inviteError } = await supabase.rpc('join_server_by_invite', { invite_code: pendingInviteCode });
+      if (!active) return;
+      if (inviteError) setError('Не удалось принять приглашение: ' + inviteError.message);
+      else {
+        setSelectedServerId(data);
+        setTab('server');
+        setNotice('Ты присоединился к серверу!');
+        await loadServers();
+      }
+      setPendingInviteCode('');
+      window.history.replaceState({}, '', window.location.pathname);
+    })();
+    return () => { active = false; };
+  }, [session?.user?.id, pendingInviteCode]);
 
   useEffect(() => {
     const conversationId = selectedConversation?.id;
@@ -1159,7 +1362,12 @@ export default function App() {
 
   return (
     <main className="app-shell">
-      <aside className="server-rail"><div className="brand-mark">K</div><div className="rail-divider" /><div className="server-icon selected">K</div></aside>
+      <aside className="server-rail">
+        <button type="button" className="brand-mark" onClick={() => setTab('friends')} aria-label="KENTY — друзья">K</button>
+        <div className="rail-divider" />
+        {servers.map(server => <button type="button" key={server.id} title={server.name} aria-label={server.name} className={'server-icon ' + (selectedServerId === server.id ? 'selected' : '')} onClick={() => { setSelectedServerId(server.id); setTab('server'); }}>{server.name[0]?.toUpperCase() || 'S'}</button>)}
+        <button type="button" className="server-icon server-add-button" onClick={() => setShowServerCreate(value => !value)} aria-label="Создать сервер">＋</button>
+      </aside>
       <aside className="sidebar">
         <div className="brand-row"><div className="brand-name">KENTY</div><span className="beta-tag">ALPHA</span></div>
         <div className="sidebar-label">ПРОСТРАНСТВО</div>
@@ -1167,6 +1375,15 @@ export default function App() {
         <button className={'nav-item ' + (tab === 'chat' ? 'selected' : '')} onClick={() => setTab('chat')}># Сообщения</button>
         <button className={'nav-item ' + (tab === 'voice' ? 'selected' : '')} onClick={() => setTab('voice')}>◖ Голосовые комнаты</button>
         <button className={'nav-item ' + (tab === 'settings' ? 'selected' : '')} onClick={() => setTab('settings')}>⚙ Настройки</button>
+        <div className="sidebar-label">СЕРВЕРЫ</div>
+        <button className="nav-item" onClick={() => setShowServerCreate(value => !value)}>＋ Создать сервер</button>
+        {showServerCreate && <form className="sidebar-create-form" onSubmit={createServer}><input value={serverNameDraft} onChange={event => setServerNameDraft(event.target.value)} maxLength={64} placeholder="Название сервера" required /><button disabled={serverBusy}>{serverBusy ? 'Создаём…' : 'Создать'}</button></form>}
+        <form className="sidebar-join-form" onSubmit={joinServerWithCode}><input value={inviteCodeDraft} onChange={event => setInviteCodeDraft(event.target.value)} placeholder="Код приглашения" aria-label="Код приглашения" /><button disabled={serverBusy || !inviteCodeDraft.trim()}>Войти</button></form>
+        {selectedServerId && <><div className="sidebar-label channel-sidebar-label">КАНАЛЫ</div>
+          <div className="server-channel-list">{serverChannels.map(channel => <button type="button" key={channel.id} className={'conversation-link ' + (selectedChannelId === channel.id ? 'selected' : '')} onClick={() => { setSelectedChannelId(channel.id); setTab('server'); }}><span className="channel-kind">{channel.channel_type === 'voice' ? '◖' : '#'}</span>{channel.name}</button>)}
+          {!serverChannels.length && <small className="sidebar-empty">Пока нет каналов</small>}</div>
+          {['owner','admin','moderator'].includes(servers.find(item => item.id === selectedServerId)?.role) && <><button className="nav-item create-channel-toggle" onClick={() => setShowChannelCreate(value => !value)}>＋ Добавить канал</button>{showChannelCreate && <form className="sidebar-create-form" onSubmit={createServerChannel}><input value={channelNameDraft} onChange={event => setChannelNameDraft(event.target.value)} maxLength={64} placeholder="Название канала" required /><button disabled={serverBusy}>Создать</button></form>}</>}
+        </>}
         <div className="sidebar-label">ПЕРЕПИСКИ</div>
         <div className="conversation-list">
           {conversations.map(c => <button className={'conversation-link ' + (selectedConversation?.id === c.id ? 'selected' : '')} key={c.id} onClick={() => { setSelectedConversation(c); setTab('chat'); }}>
@@ -1182,7 +1399,7 @@ export default function App() {
       </aside>
       <section className="main-panel">
         <header className="topbar">
-          <div className="topbar-title"><span className="hash">{tab === 'chat' ? '#' : '◖'}</span><b>{tab === 'friends' ? 'друзья' : tab === 'chat' ? (selectedConversation?.person?.display_name || selectedConversation?.person?.username || 'сообщения') : tab === 'settings' ? 'настройки' : 'голосовые-комнаты'}</b></div>
+          <div className="topbar-title"><span className="hash">{tab === 'chat' ? '#' : '◖'}</span><b>{tab === 'friends' ? 'друзья' : tab === 'chat' ? (selectedConversation?.person?.display_name || selectedConversation?.person?.username || 'сообщения') : tab === 'server' ? (servers.find(item => item.id === selectedServerId)?.name || 'сервер') : tab === 'settings' ? 'настройки' : 'голосовые-комнаты'}</b></div>
           <div className="topbar-right">{!isInstalled && <button type="button" className="install-button" onClick={installApp}>Установить</button>}<span className={'connection-pill ' + (connected ? 'connected' : '')}><i />{connected ? 'В голосовой комнате' : 'KENTY · пространство для своих'}</span></div>
         </header>
 
@@ -1228,6 +1445,16 @@ export default function App() {
               </div>
             </article>)}{!messages.length && <p className="chat-no-messages">Пока тихо. Отправь первое сообщение 👋</p>}<div ref={messagesEndRef} /></div>
             <form className="chat-composer" onSubmit={sendMessage}><button type="button" className="chat-camera-button" onClick={openChatCamera} aria-label="Открыть камеру" title="Сделать фото">📷</button><input value={message} onChange={e => setMessage(e.target.value)} placeholder="Написать сообщение…" /><button type="submit">Отправить</button></form>
+          </>}
+        </div>}
+
+        {tab === 'server' && <div className="server-content">
+          {!servers.some(item => item.id === selectedServerId) ? <div className="empty-state chat-empty"><h2>Твои серверы</h2><p>Создай сервер или присоединись по приглашению друга.</p></div> : <>
+            <section className="server-welcome"><div><span className="eyebrow">KENTY COMMUNITY</span><h1>{servers.find(item => item.id === selectedServerId)?.name}</h1><p>{servers.find(item => item.id === selectedServerId)?.description || 'Общайся, собирай друзей и создавай своё пространство.'}</p></div><button type="button" className="primary-button" onClick={createServerInvite} disabled={serverBusy}>Пригласить друзей ↗</button></section>
+            {!selectedChannelId ? <div className="empty-state">Создай первый текстовый канал в боковой панели.</div> : <><div className="server-channel-heading"><span>#</span><div><b>{serverChannels.find(channel => channel.id === selectedChannelId)?.name || 'канал'}</b><small>{serverChannels.find(channel => channel.id === selectedChannelId)?.topic || 'Общение участников сервера'}</small></div></div>
+              <div className="server-channel-messages">{channelMessages.map(item => <article className="server-chat-message" key={item.id}><div className="message-avatar">{item.sender_id === session.user.id ? (profile?.display_name || profile?.username || 'Я')[0].toUpperCase() : 'У'}</div><div><b>{item.sender_id === session.user.id ? 'Ты' : 'Участник'}</b><time>{formatMessageTime(item.created_at)}</time><p>{item.content}</p></div></article>)}{!channelMessages.length && <p className="chat-no-messages">Канал создан. Напиши первое сообщение 👋</p>}</div>
+              <form className="chat-composer server-chat-composer" onSubmit={sendChannelMessage}><input value={channelMessage} onChange={event => setChannelMessage(event.target.value)} placeholder={'Написать в #' + (serverChannels.find(channel => channel.id === selectedChannelId)?.name || 'канал') + '…'} /><button type="submit">Отправить</button></form>
+            </>}
           </>}
         </div>}
 
@@ -1296,6 +1523,7 @@ export default function App() {
         <button type="button" className={tab === 'friends' ? 'active' : ''} onClick={() => setTab('friends')}><span>♧</span><small>Друзья</small></button>
         <button type="button" className={tab === 'chat' ? 'active' : ''} onClick={() => setTab('chat')}><span>▤</span><small>Чаты</small></button>
         <button type="button" className={tab === 'voice' ? 'active' : ''} onClick={() => setTab('voice')}><span>◖</span><small>Голос</small></button>
+        <button type="button" className={tab === 'server' ? 'active' : ''} onClick={() => setTab('server')}><span>▦</span><small>Серверы</small></button>
         <button type="button" className={tab === 'settings' ? 'active' : ''} onClick={() => setTab('settings')}><span>⚙</span><small>Настройки</small></button>
       </nav>
     </main>
