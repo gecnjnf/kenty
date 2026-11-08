@@ -1,0 +1,37 @@
+name: Discord bot checks
+
+on:
+  pull_request:
+    paths:
+      - "discord-bot/**"
+      - ".github/workflows/discord-bot.yml"
+  push:
+    branches:
+      - main
+      - "feature/discord-kenty-ai-bot"
+    paths:
+      - "discord-bot/**"
+      - ".github/workflows/discord-bot.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  python-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        working-directory: discord-bot
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Compile Python source
+        working-directory: discord-bot
+        run: python -m compileall -q bot.py
+      - name: Build Docker image
+        working-directory: discord-bot
+        run: docker build -t kenty-discord-bot:ci .
