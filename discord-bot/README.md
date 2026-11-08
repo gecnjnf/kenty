@@ -1,22 +1,23 @@
 # KENTY AI — Discord bot
 
-A small, isolated Discord bot package. It does not change the KENTY web app.
+An isolated Discord bot package. It does not change the KENTY web app.
 
-## What it does
+## Current features
 - Replies in text channels when someone mentions the bot.
 - Keeps a short rolling conversation context per text channel (in memory only).
 - `/join` joins the command user's current voice channel.
-- `/say <text>` speaks text using a high-pitched Russian female neural voice.
+- `/say <text>` speaks text using a configurable Russian female neural voice.
 - `/leave` leaves the voice channel.
 - `/reset` clears the current channel's in-memory conversation context.
 
-**Current limitation:** this starter version speaks when invoked with `/say`; it does not yet continuously listen to voice participants or transcribe live conversation.
+**Not implemented yet:** continuous voice listening, speech recognition, and real-time two-way voice conversation. The bot only transmits generated speech after `/say`.
 
 ## Requirements
 - Python 3.11+
 - FFmpeg installed and available on PATH
 - A Discord bot token
 - An OpenAI API key. API usage is billed separately from a ChatGPT subscription.
+- Outbound internet access for Discord, OpenAI, and the Edge TTS speech service.
 
 ## Discord Developer Portal setup
 1. In **Bot**, enable **Message Content Intent**.
@@ -38,4 +39,13 @@ docker build -t kenty-discord-bot .
 docker run --env-file .env --restart unless-stopped kenty-discord-bot
 ```
 
-Do not commit `.env` or paste its contents into chat. Vercel serverless functions are not suitable for maintaining Discord's persistent Gateway voice connection; run this worker on an always-on host or a computer that stays on.
+The container runs as an unprivileged user. Do not commit `.env` or paste its contents into chat.
+
+## Hosting
+This bot needs a continuously running worker because it maintains a persistent Discord Gateway and voice connection. Vercel serverless functions are not suitable. Choose an always-on host or a computer that stays on; check the provider's current free-tier limits before relying on it.
+
+## Operational notes
+- Conversation history is stored only in process memory and is lost on restart.
+- Slash commands are registered when the bot connects.
+- Voice playback requires FFmpeg and the bot's **Connect** and **Speak** permissions.
+- No real Discord voice session or paid API request has been performed by repository checks alone.
